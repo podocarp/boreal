@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { beginWork, createWorld, currentTarget, feelsLike, step, tickWork, type WorldState } from './sim/world';
+import { beginWork, boilWater, createWorld, currentTarget, drink, eat, feedFire, feelsLike, lightFire, step, tickWork, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
 import { computeDebuffs } from './sim/needs';
 import { RECIPES, craft, canCraft } from './sim/craft';
@@ -23,6 +23,50 @@ const app = document.getElementById('app')!;
 const bundle = buildScene(app);
 const { scene, camera, renderer, sun, hemi, fog } = bundle;
 const input = createInput(renderer.domElement);
+
+/** Fire visuals: one group per sim fire (log pile + flame + point light). */
+const fireGroups = new Map<number, { group: THREE.Group; light: THREE.PointLight; flame: THREE.Mesh }>();
+function syncFireMeshes(): void {
+  const seen = new Set<number>();
+  for (const f of world.fires) {
+    seen.add(f.id);
+    let g = fireGroups.get(f.id);
+    if (!g) {
+      const group = new THREE.Group();
+      const logs = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 0.25, 0.5),
+        new THREE.MeshLambertMaterial({ color: 0x4a3524, flatShading: true }),
+      );
+      logs.rotation.y = 0.6;
+      logs.position.y = 0.12;
+      group.add(logs);
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.45, 1.1, 5),
+        new THREE.MeshBasicMaterial({ color: 0xff8c3a }),
+      );
+      flame.position.y = 0.75;
+      group.add(flame);
+      const light = new THREE.PointLight(0xff9a45, 0, 12, 1.6);
+      light.position.y = 1;
+      group.add(light);
+      group.position.set(f.x, heightAt(f.x, f.z), f.z);
+      scene.add(group);
+      g = { group, light, flame };
+      fireGroups.set(f.id, g);
+    }
+    const stage = f.lit ? Math.max(1, Math.min(4, Math.ceil(f.fuel / 25))) : 0;
+    g.flame.visible = stage > 0;
+    g.flame.scale.setScalar(0.4 + stage * 0.25);
+    g.light.intensity = stage * 2.2;
+    g.light.distance = 4 + stage * 4;
+  }
+  for (const [id, g] of fireGroups) {
+    if (!seen.has(id)) {
+      scene.remove(g.group);
+      fireGroups.delete(id);
+    }
+  }
+}
 
 const ray = new THREE.Raycaster();
 /** free distance along pivot→eye for camera collision (props only; terrain
@@ -93,7 +137,7 @@ function frame(now: number) {
     acc -= CONFIG.SIM_DT;
   }
 
-  // --- one-shot keys: E = work, Tab = craft (first craftable) ---
+  // --- one-shot keys: E work · Tab craft · F light · R feed · Q boil · 1 drink · 2 eat ---
   if (consumeKey('KeyE')) beginWork(world);
   if (consumeKey('Tab')) {
     const r = RECIPES.find((x) => canCraft(world.inventory, x));
@@ -101,6 +145,12 @@ function frame(now: number) {
       world.log.push({ t: world.t, day: world.day, msg: `Crafted: ${r.label}` });
     }
   }
+  if (consumeKey('KeyF')) lightFire(world, computeDebuffs(world.needs).dexterity);
+  if (consumeKey('KeyR')) feedFire(world);
+  if (consumeKey('KeyQ')) boilWater(world);
+  if (consumeKey('Digit1')) drink(world);
+  if (consumeKey('Digit2')) eat(world);
+  syncFireMeshes();
 
   // --- camera (per-frame, smooth) ---
   orbit(cam, input.dYaw, input.dPitch, 0.0022);
@@ -158,6 +208,11 @@ requestAnimationFrame(frame);
     applyCamera(0.1); // sync immediately for synchronous E2E assertions
   },
   beginWork() { return beginWork(world); },
+  lightFire() { return lightFire(world, computeDebuffs(world.needs).dexterity); },
+  feedFire() { return feedFire(world); },
+  boilWater() { return boilWater(world); },
+  drink() { return drink(world); },
+  eat() { return eat(world); },
   craftFirst() {
     const r = RECIPES.find((x) => canCraft(world.inventory, x));
     if (r && craft(world.inventory, r)) return r.id;

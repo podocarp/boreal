@@ -122,7 +122,30 @@ def main() -> int:
         assert loot["ok"], f"beginWork at wreck failed: {loot}"
         assert loot["inv"].get("knife") == 1, f"wreck loot missing knife: {loot}"
 
-        # 7) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 7) fire loop: tinder → light (retry w/ time advance) → feed → boil → night
+        fire = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       b.world.player.x = 0; b.world.player.z = -140;
+                       const inv = b.world.inventory;
+                       inv.bark = 8; inv.kindling = 8; inv.deadfall = 6; inv.snow = 1; inv.tinCup = 1;
+                       let lit = 'no-bundle';
+                       for (let a = 0; a < 6 && lit !== 'lit'; a++) {
+                         b.craftFirst();          // tinder bundle
+                         lit = b.lightFire();
+                         b.step(8);               // advance sim time (new roll seed)
+                       }
+                       b.feedFire();
+                       const boiled = b.boilWater();
+                       const t0 = b.world.needs.coreTemp;
+                       for (let i = 0; i < 8 * 120; i++) { b.step(1); if (i % 120 === 0) b.feedFire(); }
+                       return { lit, boiled, t0, t1: b.world.needs.coreTemp,
+                                fires: b.world.fires.length, dead: b.world.dead || null }; }"""
+        )
+        assert fire["lit"] == "lit", f"relay/light failed: {fire}"
+        assert fire["boiled"], f"boil failed: {fire}"
+        assert fire["t1"] > 36, f"fire night not survivable: {fire}"
+
+        # 8) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -136,7 +159,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 8) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 9) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"
