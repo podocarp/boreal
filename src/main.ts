@@ -1,53 +1,41 @@
 /**
- * BOREAL — boot: wires sim + render + input + HUD.
- * Sprint 0: renders a placeholder ground plane + crash-site marker, steps the sim.
+ * BOREAL — boot: wires sim + render + input + HUD. Sprint 1: terrain, movement,
+ * Skyrim-style third-person camera, day/night cycle, stylized scatter world.
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
 import { createWorld, step, type WorldState } from './sim/world';
+import { updatePlayer } from './sim/player';
+import { heightAt } from './sim/terrain';
+import { buildScene } from './render/scene';
+import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
+import { createInput, readIntent } from './input/input';
+import { updateSky } from './render/daynight';
+import { updateHud } from './ui/hud';
 
 let world: WorldState = createWorld(1);
+let cam: CamState = createCamState();
 
 const app = document.getElementById('app')!;
-const hud = document.getElementById('hud')!;
+const bundle = buildScene(app);
+const { scene, camera, renderer, sun, hemi, fog } = bundle;
+const input = createInput(renderer.domElement);
 
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  // preserveDrawingBuffer lets the headless test harness readPixels() the framebuffer.
-  preserveDrawingBuffer: true,
-});
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-app.appendChild(renderer.domElement);
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x8fa8bd); // pale subarctic sky
-scene.fog = new THREE.Fog(0x8fa8bd, 60, CONFIG.WORLD.SIZE_M * 1.2);
-
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(0, 8, 14);
-camera.lookAt(0, 0, 0);
-
-// Lights: cold key + ambient
-scene.add(new THREE.HemisphereLight(0xbfd4e8, 0x3a4a3f, 0.9));
-const sun = new THREE.DirectionalLight(0xfff2dd, 1.2);
-sun.position.set(60, 40, -80);
-scene.add(sun);
-
-// Placeholder ground (snow-tinted) + crash-site marker (orange box)
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(CONFIG.WORLD.SIZE_M * 2, CONFIG.WORLD.SIZE_M * 2),
-  new THREE.MeshLambertMaterial({ color: 0xdfe7ec }),
-);
-ground.rotation.x = -Math.PI / 2;
-scene.add(ground);
-
-const marker = new THREE.Mesh(
-  new THREE.BoxGeometry(3, 1.5, 8),
-  new THREE.MeshLambertMaterial({ color: 0xd4622a }),
-);
-marker.position.set(0, 0.75, -12);
-scene.add(marker);
+const ray = new THREE.Raycaster();
+/** free distance along pivot→eye for camera collision (props only; terrain
+ * handled by an eye-height clamp below). */
+function rayDist(
+  from: [number, number, number],
+  to: [number, number, number],
+): number {
+  const a = new THREE.Vector3(...from);
+  const b = new THREE.Vector3(...to);
+  const dir = b.clone().sub(a);
+  const len = dir.length();
+  ray.set(a, dir.normalize());
+  const hits = ray.intersectObjects(bundle.obstacles, false);
+  return hits.length > 0 && hits[0].distance < len ? hits[0].distance : Infinity;
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -55,30 +43,97 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Fixed-timestep accumulator loop (sim is dt-independent of frame rate).
 let acc = 0;
 let last = performance.now();
+let paused = false; // E2E: freeze sim/camera so scripted poses survive to readPixels
+
+/** Compute + apply camera pose from cam state (shared by frame loop + debug API). */
+function applyCamera(dtReal: number): void {
+  const p = world.player;
+  const pose = updateCam(
+    cam,
+    {
+      px: p.x, py: p.y, pz: p.z, pyaw: p.yaw,
+      moving: p.moving, sprinting: input.intent.run && p.moving,
+    },
+    dtReal,
+    rayDist,
+  );
+  camera.position.set(pose.eye[0], pose.eye[1], pose.eye[2]);
+  // never let the eye sink under terrain
+  const minY = heightAt(pose.eye[0], pose.eye[2]) + 0.4;
+  if (camera.position.y < minY) camera.position.y = minY;
+  camera.lookAt(pose.pivot[0], pose.pivot[1], pose.pivot[2]);
+}
+
 function frame(now: number) {
-  acc += Math.min((now - last) / 1000, 0.25);
+  const dtReal = Math.min((now - last) / 1000, 0.25);
   last = now;
+  if (paused) {
+    // keep framebuffer + sky live (hour may be scripted), but don't touch state
+    updateSky(world, scene, sun, hemi, fog);
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+    return;
+  }
+
+  // --- sim (fixed timestep) ---
+  readIntent(input, cam.yaw);
+  acc += dtReal;
   while (acc >= CONFIG.SIM_DT) {
+    updatePlayer(world, input.intent, CONFIG.SIM_DT);
     step(world, CONFIG.SIM_DT);
     acc -= CONFIG.SIM_DT;
   }
-  hud.textContent = `BOREAL dev — day ${world.day}, ${world.hourOfDay.toFixed(1)}h`;
+
+  // --- camera (per-frame, smooth) ---
+  orbit(cam, input.dYaw, input.dPitch, 0.0022);
+  input.dYaw = 0;
+  input.dPitch = 0;
+  applyCamera(dtReal);
+  const p = world.player;
+
+  // --- player mesh follows sim (no animation, user-locked) ---
+  bundle.playerMesh.position.set(p.x, p.y, p.z);
+  bundle.playerMesh.rotation.y = p.yaw;
+
+  // --- day/night ---
+  updateSky(world, scene, sun, hemi, fog);
+
+  // --- HUD ---
+  updateHud(world, input.locked);
+
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-/**
- * Debug/E2E API. NOTE: getters (not shorthand) for reassigned bindings —
- * shorthand freezes the old reference (classic stale-state bug).
- */
+/** Debug/E2E API — getters for reassigned bindings (stale-ref bug class). */
 (window as unknown as Record<string, unknown>).__boreal = {
   get world() { return world; },
   get scene() { return scene; },
+  get camera() { return camera; },
   get renderer() { return renderer; },
-  reset(seed = 1) { world = createWorld(seed); },
-  step(n = 1, dt = CONFIG.SIM_DT) { for (let i = 0; i < n; i++) step(world, dt); },
+  get cam() { return cam; },
+  reset(seed = 1) {
+    world = createWorld(seed);
+    cam = createCamState();
+  },
+  step(n = 1, dt = CONFIG.SIM_DT) {
+    for (let i = 0; i < n; i++) {
+      updatePlayer(world, { fwd: 0, strafe: 0, run: false, camYaw: cam.yaw }, dt);
+      step(world, dt);
+    }
+  },
+  /** scripted movement for E2E (bypasses keyboard) */
+  move(fwd: number, strafe: number, run = false) {
+    updatePlayer(world, { fwd, strafe, run, camYaw: cam.yaw }, CONFIG.SIM_DT);
+  },
+  orbitCam(dYaw: number, dPitch: number) {
+    orbit(cam, dYaw, dPitch, 1);
+    applyCamera(0.1); // sync immediately for synchronous E2E assertions
+  },
+  renderOnce() { renderer.render(scene, camera); },
+  setPaused(v: boolean) { paused = v; },
+  CAM,
 };

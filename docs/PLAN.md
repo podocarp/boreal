@@ -18,7 +18,7 @@ Anything beyond this (cooking depth, more wildlife, walking-out route, saves, ar
 
 ## Sprints
 - **S0 — Scaffold** ✅ commit `sprint-0`: repo, docs skeleton, Vite+TS+three.js, Vitest, flake.nix, Playwright smoke (blank scene renders), GitHub remote.
-- **S1 — Engine core:** fixed-timestep loop, terrain heightfield + collision, third-person over-shoulder camera, WASD movement, day/night clock, debug API, greybox map layout.
+- **S1 — Engine core** ✅ commit `sprint-1`: fixed-timestep loop, analytic terrain + zones + collision, third-person over-shoulder camera (Skyrim-style), WASD movement, day/night clock, debug API, stylized scatter world.
 - **S2 — Needs & thermoregulation:** core needs model (per DESIGN-needs.md), cold/wetness/windchill, shivering→hypothermia chain, sleep, HUD, death causes. Sim-heavy + tests.
 - **S3 — World & interaction:** resource nodes, gathering, inventory, prompts/interaction system, crafting (tools, containers, bough bundles), camp/stockpile concept.
 - **S4 — Fire & water:** fire model (fuel, stages, failure, extinguish, warmth radius), friction-lite minigame, boil/melt water, cook water, wetness from snow/rain.
@@ -28,3 +28,5 @@ Anything beyond this (cooking depth, more wildlife, walking-out route, saves, ar
 
 ## Status log
 - 2026-10-06: v0.1 plan agreed internally; awaiting research digests → v0.2. User chose Arctic + third-person.
+- 2026-10-06: research digests landed → needs numbers v1 (DESIGN-needs.md), scenario notes (RESEARCH-survivorman.md). User locked stylized low-poly art, no animations; camera = Skyrim/Dinkum over-shoulder.
+- 2026-10-06: **S1 done**: analytic terrain (lake/stream/bog/ridge zones) shared sim↔render, deterministic prop scatter + colliders, camera-relative WASD + facing + slide collision, Skyrim-style camera (shoulder pivot, orbit, collision ease, sprint swing, idle recenter), day/night sky (8h light), stylized palette + instanced low-poly trees/rocks, crash site, HUD. 18 unit tests + extended E2E (movement, camera, scene graph, day/night, pixels).

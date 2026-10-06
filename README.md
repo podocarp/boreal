@@ -26,7 +26,12 @@ nix develop --extra-experimental-features 'nix-command flakes' . -c bash -lc \
 
 | Key | Action |
 |---|---|
-| — | Sprint 0: nothing yet; scene renders and clock ticks |
+| Click canvas | Capture mouse (pointer lock); Esc releases |
+| WASD | Move (camera-relative; player faces movement) |
+| Shift | Sprint |
+| Mouse | Orbit camera (over-shoulder) |
+
+Sprint 1 world: crash site on the lake shore (orange wreck), spruce/birch forest, stream to the west ridge, muskeg bog to the north (slows you), rocks on the ridge. Day ≈ 12 real minutes; sun rises ~09:00, sets ~17:00.
 
 ## License
 TBD (not yet chosen; assume all rights reserved for now).

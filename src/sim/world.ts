@@ -4,6 +4,8 @@
  * S2 adds needs/thermoregulation per docs/DESIGN-needs.md.
  */
 import { CONFIG } from './config';
+import { collidersFrom, scatter, type Collider } from './scatter';
+import type { Zone } from './terrain';
 
 export interface WorldState {
   seed: number;
@@ -13,11 +15,28 @@ export interface WorldState {
   hourOfDay: number;
   /** In-game day number, 1-based. */
   day: number;
-  player: { x: number; z: number; yaw: number };
+  player: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    speed: number;
+    moving: boolean;
+    zone: Zone;
+  };
+  colliders: Collider[];
 }
 
 export function createWorld(seed = 1): WorldState {
-  return { seed, t: 0, hourOfDay: 8, day: 1, player: { x: 0, z: 0, yaw: 0 } };
+  const props = scatter(seed);
+  return {
+    seed,
+    t: 0,
+    hourOfDay: 8,
+    day: 1,
+    player: { x: 0, y: 0, z: -140, yaw: Math.PI, speed: 0, moving: false, zone: 'lake' },
+    colliders: collidersFrom(props),
+  };
 }
 
 /** Advance the world by one fixed tick (CONFIG.SIM_DT seconds). Pure w.r.t. args. */

@@ -27,5 +27,7 @@ export const CONFIG = {
     WALK_SPEED_MPS: 1.4,
     RUN_SPEED_MPS: 3.2,
     EYE_HEIGHT_M: 1.65,
+    RADIUS_M: 0.35,
+    TURN_RATE_RADPS: 10,
   },
 } as const;
