@@ -97,7 +97,20 @@ def main() -> int:
                      "props_rock", "player", "crash"]:
             assert graph.get(feat, 0) >= 1, f"scene missing '{feat}': {sorted(graph)}"
 
-        # 5) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 5) needs sim: idle night on the lake chills the core; debuff fires
+        needs = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       const t0 = b.world.needs.coreTemp;
+                       // 6 game hours idle at night
+                       for (let i = 0; i < 6 * 120; i++) b.step(1);
+                       return { t0, t1: b.world.needs.coreTemp,
+                                log: b.world.log.map(l => l.msg),
+                                dead: b.world.dead || null }; }"""
+        )
+        assert needs["t1"] < needs["t0"] - 1.5, f"core temp did not drop overnight: {needs}"
+        assert any('shivering' in m for m in needs["log"]), f"no shiver event: {needs['log']}"
+
+        # 6) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -111,7 +124,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 6) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 7) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"

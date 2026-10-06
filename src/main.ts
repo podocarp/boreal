@@ -4,8 +4,9 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { createWorld, step, type WorldState } from './sim/world';
+import { createWorld, feelsLike, step, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
+import { computeDebuffs } from './sim/needs';
 import { heightAt } from './sim/terrain';
 import { buildScene } from './render/scene';
 import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
@@ -85,7 +86,7 @@ function frame(now: number) {
   acc += dtReal;
   while (acc >= CONFIG.SIM_DT) {
     updatePlayer(world, input.intent, CONFIG.SIM_DT);
-    step(world, CONFIG.SIM_DT);
+    step(world, CONFIG.SIM_DT, input.intent.run && world.player.moving);
     acc -= CONFIG.SIM_DT;
   }
 
@@ -104,7 +105,7 @@ function frame(now: number) {
   updateSky(world, scene, sun, hemi, fog);
 
   // --- HUD ---
-  updateHud(world, input.locked);
+  updateHud(world, input.locked, feelsLike(world), computeDebuffs(world.needs));
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

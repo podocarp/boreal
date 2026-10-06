@@ -6,6 +6,7 @@
 import { CONFIG } from './config';
 import { collidersFrom, scatter, type Collider } from './scatter';
 import type { Zone } from './terrain';
+import { airTempAt, createEnv, createNeeds, tickNeeds, windchill, type Difficulty, type EnvState, type NeedsState } from './needs';
 
 export interface WorldState {
   seed: number;
@@ -25,9 +26,16 @@ export interface WorldState {
     zone: Zone;
   };
   colliders: Collider[];
+  needs: NeedsState;
+  env: EnvState;
+  difficulty: Difficulty;
+  /** rolling event log for the death/rescue narrative */
+  log: { t: number; day: number; msg: string }[];
+  /** set when the run ends */
+  dead?: { cause: string; detail: string };
 }
 
-export function createWorld(seed = 1): WorldState {
+export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldState {
   const props = scatter(seed);
   return {
     seed,
@@ -36,11 +44,20 @@ export function createWorld(seed = 1): WorldState {
     day: 1,
     player: { x: 0, y: 0, z: -140, yaw: Math.PI, speed: 0, moving: false, zone: 'lake' },
     colliders: collidersFrom(props),
+    needs: createNeeds(),
+    env: createEnv(),
+    difficulty,
+    log: [{ t: 0, day: 1, msg: 'You crawl from the wreck. The radio is dead. Search pattern passes near day 7.' }],
   };
 }
 
+function pushLog(w: WorldState, msg: string): void {
+  w.log.push({ t: w.t, day: w.day, msg });
+  if (w.log.length > 200) w.log.shift();
+}
+
 /** Advance the world by one fixed tick (CONFIG.SIM_DT seconds). Pure w.r.t. args. */
-export function step(w: WorldState, dt = CONFIG.SIM_DT): void {
+export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void {
   w.t += dt;
   const hoursPerSec = 1 / CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
   w.hourOfDay += dt * hoursPerSec;
@@ -48,6 +65,31 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT): void {
     w.hourOfDay -= 24;
     w.day += 1;
   }
+
+  // environment at player: diurnal temp, wind (lake/ridge exposed, forest sheltered)
+  const night = w.hourOfDay < 9 || w.hourOfDay > 17;
+  w.env.airTempC = airTempAt(w.hourOfDay, CONFIG.WORLD.TEMP_BASE_C, CONFIG.CLIMATE.TEMP_SWING_C);
+  const zoneWind =
+    w.player.zone === 'lake' || w.player.zone === 'ridge' ? 1.35 : w.player.zone === 'forest' ? 0.6 : 1.0;
+  w.env.windKmh = CONFIG.WORLD.WIND_BASE_KMH * zoneWind * (night ? CONFIG.CLIMATE.WIND_NIGHT_MUL : 1);
+
+  if (!w.dead) {
+    const res = tickNeeds(w.needs, w.env, dt, {
+      moving: w.player.moving,
+      sprinting,
+      difficulty: w.difficulty,
+    });
+    for (const e of res.events) pushLog(w, e);
+    if (res.died) {
+      w.dead = res.died;
+      pushLog(w, `You died of ${res.died.cause} (${res.died.detail}).`);
+    }
+  }
+}
+
+/** feels-like temp at player (HUD). */
+export function feelsLike(w: WorldState): number {
+  return windchill(w.env.airTempC, w.env.windKmh);
 }
 
 /** Deterministic RNG (mulberry32). Sim code must use this, never Math.random. */
