@@ -33,7 +33,7 @@ Read-me-first for any agent (fresh subagent or resumed-after-compaction). This f
 
 ## Docs map
 - `docs/VISION.md` pillars/scenario/non-goals · `docs/TECH.md` stack+camera spec · `docs/PLAN.md` sprint plan + dated status log (append entries) · `docs/DECISIONS.md` append-only ADRs
-- `docs/DESIGN-needs.md` + `docs/RESEARCH-needs.md` needs model & tuning targets · `docs/DESIGN-world.md` zones/resources/fire/shelter/food/rescue design · `docs/RESEARCH-survivorman.md` scenario facts
+- `docs/DESIGN-needs.md` + `docs/RESEARCH-needs.md` needs model & tuning targets · `docs/RESEARCH-needs-full.md` full per-game needs research (PZ/TLD/Green Hell/Raft/Valheim numbers + pitfalls) · `docs/RESEARCH-survivorman.md` scenario facts (corrected episode list — Borneo/Fiji/Yucatan don't exist) · `docs/DESIGN-world.md` zones/resources/fire/shelter/food/rescue design · `docs/RESEARCH-survivorman.md` scenario facts
 - `README.md` controls + "How to play" run guide.
 
 ## Game-design principles (user-agreed)
@@ -41,6 +41,7 @@ Consequences not chores: slow need decay, auto-sip from carried stock, no click-
 
 ## Post-MVP backlog (not started)
 Trapper's cache discovery · widowmaker scripted hazard · tea/morale · save/load · balance Monte-Carlo (naive vs smart play) · art polish · license choice (currently TBD).
+Needs-research deltas not yet built (see RESEARCH-needs-full.md §3): hidden fat-reserve pool buffering hunger · auto-EAT toggle (we only auto-sip) · Raft-style craving curve (food more effective when hungrier) · 3-match economy as a hard mode.
 
 ## Workflow expectations (from user)
 Sprint = dev → eval → test loop ending in: unit green, E2E green, docs updated (PLAN.md log + this file if state changed), commit + tag, push. Delegate exploration/simple parallelizable work to subagents to protect context; point them at this file. Keep replies to the user short and factual.
