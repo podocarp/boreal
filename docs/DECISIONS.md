@@ -7,3 +7,5 @@
 - **2026-10-06 — Stack: Vite + TypeScript + three.js, sim/render split.** Vitest for pure-sim tests; Playwright+Python+nixpkgs Chromium for headless render/E2E (NixOS host, stock Chrome segfaults).
 - **2026-10-06 — Needs philosophy (user requirement):** consequences-based needs, batch management, auto-consume from stock allowed; no timed drinking chores. Full spec in DESIGN-needs.md.
 - **2026-10-06 — Repo:** GitHub `podocarp/boreal`, local at `/persist/hermes/projects/boreal`. Commits ↔ sprints, tags `sprint-N`, MVP tag `v0.1-mvp`.
+
+- **2026-10-06 — Correction to scenario shortlist (post-MVP, docs only).** A late-arriving verified research pass showed the original digest's Borneo/Fiji/Yucatan episodes don't exist (Survivor, not Survivorman) and episode numbers were off. No decision changes: Arctic (Pond Inlet, S1E5) stands as user choice and shipped in v0.1-mvp; its mechanics mapping was already fact-checked against PBS/Facing North sources. RESEARCH-survivorman.md corrected in place.
