@@ -46,6 +46,11 @@ export function createInput(canvas: HTMLCanvasElement): InputState {
 
 const pressed = new Set<string>();
 
+/** True while the key is physically held. */
+export function isHeld(s: InputState, code: string): boolean {
+  return (s as unknown as { _held: Set<string> })._held.has(code);
+}
+
 /** True once per physical key press (consumes the event). */
 export function consumeKey(code: string): boolean {
   if (pressed.has(code)) {

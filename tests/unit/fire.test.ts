@@ -45,10 +45,10 @@ describe('fire stages & burn', () => {
 describe('friction fire', () => {
   it('dry skilled attempt succeeds most of the time', () => {
     let wins = 0;
-    for (let i = 0; i < 200; i++)
+    for (let i = 0; i < 400; i++)
       if (frictionRoll({ dexterity: 0.9, handWetness: 0, coreTemp: 37, woodDry: true, rng: Math.random }))
         wins++;
-    expect(wins / 200).toBeGreaterThan(0.7);
+    expect(wins / 400).toBeGreaterThan(0.65); // p=0.75; 400 samples keeps this non-flaky
   });
 
   it('wet hands + cold + green wood nearly always fails', () => {

@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { beginWork, boilWater, buildShelter, createWorld, currentTarget, drink, eat, feedFire, feelsLike, lightFire, step, tickWork, toggleSleep, type WorldState } from './sim/world';
+import { beginWork, boilWater, buildShelter, checkSnares, createWorld, currentTarget, drink, eat, feedFire, feelsLike, fish, lightFire, setSnareAction, step, tickWork, toggleSleep, treatWound, cook, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
 import { computeDebuffs } from './sim/needs';
 import { RECIPES, craft, canCraft } from './sim/craft';
@@ -12,7 +12,7 @@ import { INTERACT_LABEL } from './sim/interact';
 import { heightAt } from './sim/terrain';
 import { buildScene } from './render/scene';
 import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
-import { createInput, readIntent, consumeKey } from './input/input';
+import { createInput, readIntent, consumeKey, isHeld } from './input/input';
 import { updateSky } from './render/daynight';
 import { updateHud } from './ui/hud';
 
@@ -70,6 +70,48 @@ function syncFireMeshes(): void {
 
 /** Shelter visuals: lean-to mesh grows with build step. */
 const shelterGroups = new Map<number, THREE.Group>();
+const wolfGroups = new Map<number, THREE.Group>();
+function makeWolfMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const grey = new THREE.MeshLambertMaterial({ color: 0x6b6f75, flatShading: true });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x3a3d42, flatShading: true });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1.1), grey);
+  body.position.y = 0.55;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.34, 0.45), grey);
+  head.position.set(0, 0.78, 0.72);
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.22), dark);
+  snout.position.set(0, 0.7, 0.98);
+  g.add(body, head, snout);
+  for (const [dx, dz] of [[-0.18, 0.35], [0.18, 0.35], [-0.18, -0.35], [0.18, -0.35]] as const) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.4, 0.13), dark);
+    leg.position.set(dx, 0.2, dz);
+    g.add(leg);
+  }
+  return g;
+}
+function syncWolfMeshes(): void {
+  const seen = new Set<number>();
+  for (const w of world.wolves) {
+    seen.add(w.id);
+    let g = wolfGroups.get(w.id);
+    if (!g) {
+      g = makeWolfMesh();
+      wolfGroups.set(w.id, g);
+      scene.add(g);
+    }
+    g.position.set(w.x, heightAt(w.x, w.z), w.z);
+    const d = Math.hypot(world.player.x - w.x, world.player.z - w.z) || 1;
+    g.rotation.y = Math.atan2((world.player.x - w.x) / d, (world.player.z - w.z) / d);
+    g.visible = w.state !== 'fleeing';
+  }
+  for (const [id, g] of wolfGroups) {
+    if (!seen.has(id)) {
+      scene.remove(g);
+      wolfGroups.delete(id);
+    }
+  }
+}
+
 function syncShelterMeshes(): void {
   const seen = new Set<number>();
   for (const s of world.shelters) {
@@ -222,8 +264,15 @@ function frame(now: number) {
   if (consumeKey('Digit2')) eat(world);
   if (consumeKey('KeyG')) buildShelter(world);
   if (consumeKey('KeyZ')) toggleSleep(world);
+  if (consumeKey('KeyC')) setSnareAction(world);
+  if (consumeKey('KeyX')) checkSnares(world);
+  if (consumeKey('KeyV')) fish(world);
+  if (consumeKey('KeyB')) cook(world);
+  if (consumeKey('KeyT')) treatWound(world);
+  world.shouting = isHeld(input, 'Space'); // hoo-hoo! repels wolves
   syncFireMeshes();
   syncShelterMeshes();
+  syncWolfMeshes();
 
   // --- camera (per-frame, smooth) ---
   orbit(cam, input.dYaw, input.dPitch, 0.0022);
@@ -281,6 +330,11 @@ requestAnimationFrame(frame);
     applyCamera(0.1); // sync immediately for synchronous E2E assertions
   },
   beginWork() { return beginWork(world); },
+  setSnare() { return setSnareAction(world); },
+  checkSnares() { return checkSnares(world); },
+  fish() { return fish(world); },
+  cook() { return cook(world); },
+  treatWound() { return treatWound(world); },
   buildShelter() { return buildShelter(world); },
   toggleSleep() { return toggleSleep(world); },
   lightFire() { return lightFire(world, computeDebuffs(world.needs).dexterity); },

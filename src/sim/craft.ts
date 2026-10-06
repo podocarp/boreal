@@ -42,6 +42,13 @@ export const RECIPES: Recipe[] = [
     hours: 0.25,
   },
   {
+    id: 'cordage',
+    label: 'Cordage (twisted bark)',
+    in: [{ item: 'bark', n: 4 }],
+    out: [{ item: 'cordage', n: 1 }],
+    hours: 0.25,
+  },
+  {
     id: 'torch',
     label: 'Torch',
     in: [{ item: 'bark', n: 2 }, { item: 'deadfall', n: 1 }],

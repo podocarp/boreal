@@ -11,6 +11,11 @@ import { buildInteractables, findTarget, startTask, WRECK_LOOT, YIELDS, type Int
 import { invAdd, invCanAdd, invRemove, invHas, type Inventory } from './items';
 import { addFuel, frictionRoll, maxWarmth, tickFire, type Fire } from './fire';
 import {
+  addInjury, buildFishHoles, fishRoll, setSnare, spawnWolves,
+  sepsisDamagePerH, tickInjuries, tickSnares, tickWolves, treatInjury,
+  type FishHole, type Injury, type Snare, type Wolf,
+} from './dangers';
+import {
   activeStorm,
   canSleep,
   scoreSite,
@@ -58,6 +63,17 @@ export interface WorldState {
   shelters: Shelter[];
   nextShelterId: number;
   sleep: SleepState;
+  snares: Snare[];
+  nextSnareId: number;
+  fishHoles: FishHole[];
+  wolves: Wolf[];
+  injuries: Injury[];
+  /** true while the player shouts (hoo-hoo) — wolf repel */
+  shouting: boolean;
+  /** wolves spawned this night (reset at dawn) */
+  wolvesOut: boolean;
+  /** serializable RNG stream counter (mix with seed per roll) */
+  rngN: number;
 }
 
 export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldState {
@@ -81,6 +97,14 @@ export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldS
     shelters: [],
     nextShelterId: 1,
     sleep: createSleep(),
+    snares: [],
+    nextSnareId: 1,
+    fishHoles: buildFishHoles(seed),
+    wolves: [],
+    injuries: [],
+    shouting: false,
+    wolvesOut: false,
+    rngN: 0,
   };
 }
 
@@ -92,6 +116,12 @@ function pushLog(w: WorldState, msg: string): void {
 /** dt (real sim seconds) → game hours. */
 function dtGameH(_w: WorldState, dt: number): number {
   return dt / CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
+}
+
+/** Deterministic roll from the world's RNG stream (serializable). */
+function roll(w: WorldState): number {
+  w.rngN = (w.rngN + 1) | 0;
+  return makeRng((w.seed * 0x9e3779b9) ^ (w.rngN * 0x85ebca6b))();
 }
 
 /** Advance the world by one fixed tick (CONFIG.SIM_DT seconds). Pure w.r.t. args. */
@@ -151,6 +181,59 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
       }
     }
 
+    // --- S6: food & dangers ---
+    // snares catch over time (deep-snow mulch from recent storm halves rate)
+    if (w.snares.some((s) => s.set)) {
+      const snowMul = activeStorm(w.day, w.hourOfDay) ? 0.5 : 1;
+      const { caught, ids } = tickSnares(w.snares, dtGameH(w, dt), snowMul, () => roll(w));
+      for (const id of ids) {
+        const s = w.snares.find((x) => x.id === id)!;
+        s.pending = (s.pending ?? 0) + 1; // must be collected at the snare
+      }
+      if (caught) pushLog(w, 'A snare sprang somewhere down the stream bank.');
+    }
+
+    // wolves: nights from day 2; gone at dawn
+    if (night && w.day >= 2 && !w.wolvesOut) {
+      w.wolves = spawnWolves(w.seed + w.day * 97);
+      w.wolvesOut = true;
+    } else if (!night && w.wolvesOut) {
+      w.wolves = [];
+      w.wolvesOut = false;
+    }
+    if (w.wolves.length > 0) {
+      const fire = w.env.fireWarmth > 0.1 ? nearestFire(w) : null;
+      const weakened =
+        w.needs.coreTemp < CONFIG.THERMO.COLD_C ||
+        w.needs.health < 60 ||
+        w.needs.energy < 20 ||
+        w.needs.sleeping;
+      const resW = tickWolves(w.wolves, dt, {
+        px: w.player.x,
+        pz: w.player.z,
+        night,
+        fireX: fire && fire.lit ? fire.x : null,
+        fireZ: fire && fire.lit ? fire.z : 0,
+        fireR: fire && fire.lit ? 6 : 0,
+        playerWeakened: weakened,
+        playerShouting: w.shouting,
+        rng: () => roll(w),
+      });
+      for (const e of resW.events) pushLog(w, e);
+      if (resW.damage > 0) {
+        w.needs.health = Math.max(0, w.needs.health - resW.damage * 0.5);
+        addInjury(w.injuries, 'wolf bite', 35 + resW.damage);
+        if (w.needs.health <= 0) {
+          w.dead = { cause: 'wolf attack', detail: 'The pack finished what the cold started.' };
+          pushLog(w, 'The pack closes in. The snow goes red.');
+        }
+      }
+    }
+    w.shouting = false; // held per-frame from input
+
+    // injuries → infection
+    for (const e of tickInjuries(w.injuries, dtGameH(w, dt), () => roll(w))) pushLog(w, e);
+
     const res = tickNeeds(w.needs, w.env, dt, {
       moving: w.player.moving,
       sprinting,
@@ -160,6 +243,16 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
     if (res.died) {
       w.dead = res.died;
       pushLog(w, `You died of ${res.died.cause} (${res.died.detail}).`);
+    }
+
+    // sepsis drains health AFTER regen (untreated infection out-heals recovery)
+    const sep = sepsisDamagePerH(w.injuries);
+    if (sep > 0 && !w.dead) {
+      w.needs.health = Math.max(0, w.needs.health - sep * dtGameH(w, dt));
+      if (w.needs.health <= 0) {
+        w.dead = { cause: 'infection', detail: 'Blood poisoning from an untreated wound.' };
+        pushLog(w, 'Fever takes you. The wound won.');
+      }
     }
   }
 }
@@ -264,7 +357,7 @@ export function lightFire(w: WorldState, dexterity = 0.7): 'lit' | 'failed' | 'n
       handWetness: w.needs.wetness,
       coreTemp: w.needs.coreTemp,
       woodDry: true,
-      rng: makeRng(Math.floor(w.t * 1000) ^ w.seed),
+      rng: () => roll(w),
     });
   if (!lit) {
     pushLog(w, 'The ember died in your hands. No flame.');
@@ -342,7 +435,7 @@ export function drink(w: WorldState): boolean {
   if (invHas(w.inventory, 'waterRaw', 1)) {
     invRemove(w.inventory, 'waterRaw', 1);
     w.needs.carriedWaterL += 1;
-    if (makeRng(Math.floor(w.t * 7919) ^ w.seed)() < 0.35) {
+    if (roll(w) < 0.35) {
       pushLog(w, 'That water disagreed with you...');
       w.needs.hydration = Math.max(0, w.needs.hydration - 8); // gut bug
     }
@@ -358,12 +451,103 @@ export function drink(w: WorldState): boolean {
   return false;
 }
 
-/** Eat berries (the MVP food source until S6 adds snares/fish). */
+/** Eat (cooked meat > berries > raw meat). */
 export function eat(w: WorldState): boolean {
-  if (!invHas(w.inventory, 'berries', 1)) return false;
-  invRemove(w.inventory, 'berries', 1);
-  w.needs.hunger = Math.min(100, w.needs.hunger + 10);
+  return eat2(w);
+}
+
+// ---------------------------------------------------------------------------
+// Food & dangers actions (S6)
+// ---------------------------------------------------------------------------
+
+/** Set a snare at the player (costs 1 cordage). Quality from hare sign. */
+export function setSnareAction(w: WorldState): 'set' | 'materials' | 'too-close' {
+  if (w.dead) return 'materials';
+  if (!invHas(w.inventory, 'cordage', 1)) return 'materials';
+  if (w.snares.some((s) => s.set && Math.hypot(s.x - w.player.x, s.z - w.player.z) < 8)) {
+    return 'too-close'; // overlapping runs spook the hares
+  }
+  invRemove(w.inventory, 'cordage', 1);
+  const s = setSnare(w.snares, w.nextSnareId++, w.player.x, w.player.z, w.seed);
+  pushLog(w, s.quality > 0.5 ? 'Snare set on fresh sign — good spot.' : 'Snare set. The sign here is thin.');
+  return 'set';
+}
+
+/** Collect game from any snare within reach. */
+export function checkSnares(w: WorldState): number {
+  let got = 0;
+  for (const s of w.snares) {
+    if ((s.pending ?? 0) > 0 && Math.hypot(s.x - w.player.x, s.z - w.player.z) < 3) {
+      if (invCanAdd(w.inventory, 'meat', s.pending!)) {
+        invAdd(w.inventory, 'meat', s.pending!);
+        got += s.pending!;
+        s.pending = 0;
+      } else pushLog(w, 'No room for the game.');
+    }
+  }
+  if (got) pushLog(w, `You collect ${got}× small game from the snare.`);
+  return got;
+}
+
+/** Fish at an ice-edge hole (needs cordage; dawn/dusk bite better). */
+export function fish(w: WorldState): 'caught' | 'missed' | 'no-hole' | 'materials' {
+  if (w.dead) return 'no-hole';
+  const hole = w.fishHoles.find((h) => h.usesLeft > 0 && Math.hypot(h.x - w.player.x, h.z - w.player.z) < 4);
+  if (!hole) return 'no-hole';
+  if (!invHas(w.inventory, 'cordage', 1)) return 'materials';
+  if (fishRoll(w.hourOfDay, () => roll(w))) {
+    hole.usesLeft -= 1;
+    invAdd(w.inventory, 'meat', 1);
+    pushLog(w, 'A pickerel comes up the hole. Meat.');
+    return 'caught';
+  }
+  pushLog(w, 'The line goes slack. Nothing.');
+  return 'missed';
+}
+
+/** Cook raw meat at a lit fire. */
+export function cook(w: WorldState): boolean {
+  const f = nearestFire(w, 3);
+  if (!f || !f.lit || !invHas(w.inventory, 'meat', 1)) return false;
+  invRemove(w.inventory, 'meat', 1);
+  invAdd(w.inventory, 'meatCooked', 1);
+  pushLog(w, 'You roast the meat over the coals.');
   return true;
+}
+
+/** Treat the worst wound with duct tape + boiled-water rinse (needs fire). */
+export function treatWound(w: WorldState): boolean {
+  if (!invHas(w.inventory, 'ductTape', 1)) return false;
+  const f = nearestFire(w, 3);
+  if (!f || !f.lit) return false;
+  if (!treatInjury(w.injuries)) return false;
+  invRemove(w.inventory, 'ductTape', 1);
+  pushLog(w, 'You rinse the wound with boiled water and close it with tape. It hurts. It helps.');
+  return true;
+}
+
+/** Eat: cooked meat >> berries > raw meat (risk). */
+export function eat2(w: WorldState): boolean {
+  if (invHas(w.inventory, 'meatCooked', 1)) {
+    invRemove(w.inventory, 'meatCooked', 1);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 45);
+    return true;
+  }
+  if (invHas(w.inventory, 'berries', 1)) {
+    invRemove(w.inventory, 'berries', 1);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 10);
+    return true;
+  }
+  if (invHas(w.inventory, 'meat', 1)) {
+    invRemove(w.inventory, 'meat', 1);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 30);
+    if (roll(w) < 0.5) {
+      pushLog(w, 'Raw meat. Your gut knows it.');
+      w.needs.hydration = Math.max(0, w.needs.hydration - 10);
+    }
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

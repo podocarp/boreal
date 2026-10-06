@@ -30,8 +30,22 @@ nix develop --extra-experimental-features 'nix-command flakes' . -c bash -lc \
 | WASD | Move (camera-relative; player faces movement) |
 | Shift | Sprint |
 | Mouse | Orbit camera (over-shoulder) |
+| E | Work nearest target (gather / loot wreck / snow / water / berries) |
+| Tab | Craft first available recipe |
+| F | Light fire (needs tinder bundle; friction roll) |
+| R | Feed nearest fire (deadfall/kindling) |
+| Q | Melt snow / boil water (at lit fire, needs container) |
+| G | Build next shelter step at position |
+| Z | Sleep / wake |
+| C | Set snare (needs cordage; near hare sign by the stream) |
+| X | Check snares in reach |
+| V | Fish at an ice-edge hole (needs cordage; dawn/dusk bite better) |
+| B | Cook meat at fire |
+| T | Treat wound (duct tape, at fire) |
+| 1 / 2 | Drink / eat |
+| Space | Shout "hoo-hoo!" (repels wolves while held) |
 
-Sprint 1 world: crash site on the lake shore (orange wreck), spruce/birch forest, stream to the west ridge, muskeg bog to the north (slows you), rocks on the ridge. Day ≈ 12 real minutes; sun rises ~09:00, sets ~17:00.
+World: crash site on the lake shore (orange wreck), spruce/birch forest, stream to the west ridge, muskeg bog to the north (slows you), rocks on the ridge, berry scrub, hare sign along the stream banks, pickerel holes where the stream meets the lake. Day ≈ 12 real minutes; sun rises ~09:00, sets ~17:00. Storms on days 2 and 4; wolves prowl the nights from day 2 — fire and shouting keep them honest.
 
 ## License
 TBD (not yet chosen; assume all rights reserved for now).

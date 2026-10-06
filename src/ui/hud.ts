@@ -44,7 +44,7 @@ export function updateHud(
       : `DAY ${w.day}  ${hh}:${mm}  ${w.env.airTempC.toFixed(0)}°C (feels ${feelsLikeC.toFixed(0)}°C)  ${w.player.zone}`,
     `HP ${bar(w.needs.health, '♥')}  ${bar(w.needs.hydration, '~')}  ${bar(w.needs.hunger, '✚')}  ${bar(w.needs.energy, '☾')}`,
     warn.length ? `⚠ ${warn.join(' · ')}` : locked
-      ? 'WASD · E work · Tab craft · F fire · R feed · Q boil · G shelter · Z sleep · 1 drink · 2 eat'
+      ? 'WASD · E work · Tab craft · F fire · R feed · Q boil · G shelter · Z sleep · C/X snare · V fish · B cook · T treat · Space shout'
       : 'BOREAL — click to take control',
   ];
   if (prompt) lines.push(prompt);

@@ -166,7 +166,30 @@ def main() -> int:
         assert shelter["done"], f"shelter not complete: {shelter}"
         assert shelter["energy"] > 85, f"sheltered sleep not restorative: {shelter}"
 
-        # 9) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 9) dangers loop: snare set → wolves at night day 2+ → fire+shout repels
+        dangers = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       const w = b.world; const inv = w.inventory;
+                       inv.cordage = 2;
+                       w.player.x = -6; w.player.z = -80; // near stream bank
+                       const set = b.setSnare();
+                       // night of day 2: pack arrives
+                       w.day = 2; w.hourOfDay = 22;
+                       b.step(2);
+                       const spawned = w.wolves.length;
+                       // big fire + shouting: wolves flee, no bites
+                       w.fires.push({ id: 77, x: w.player.x, z: w.player.z, fuel: 100, lit: true });
+                       w.needs.coreTemp = 30; // weakened: pack interested
+                       for (let i = 0; i < 600; i++) { w.shouting = true; b.step(1); }
+                       return { set, spawned, fled: w.wolves.every(x => x.state === 'fleeing'),
+                                injuries: w.injuries.length }; }"""
+        )
+        assert dangers["set"] == "set", f"snare failed: {dangers}"
+        assert dangers["spawned"] >= 2, f"no wolves: {dangers}"
+        assert dangers["fled"], f"wolves did not flee fire+shouting: {dangers}"
+        assert dangers["injuries"] == 0, f"wounded despite repelling: {dangers}"
+
+        # 10) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -180,7 +203,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 10) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 11) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"

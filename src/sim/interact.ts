@@ -16,6 +16,7 @@ export type InteractKind =
   | 'rock' // boulder → hand rocks
   | 'snow' // ground → packed snow (needs container)
   | 'water' // stream → raw water (needs container)
+  | 'berries' // bog hummocks / scrub → berries
   | 'wreck'; // crash site → one-time loot
 
 export interface Interactable {
@@ -40,6 +41,7 @@ export const INTERACT_LABEL: Record<InteractKind, string> = {
   rock: 'Collect hand rocks',
   snow: 'Pack snow (container)',
   water: 'Scoop stream water (container)',
+  berries: 'Pick berries',
   wreck: 'Scavenge the wreck',
 };
 
@@ -51,6 +53,7 @@ export const WORK_HOURS: Record<InteractKind, number> = {
   rock: 0.25,
   snow: 0.1,
   water: 0.1,
+  berries: 0.2,
   wreck: 0.5,
 };
 
@@ -61,6 +64,7 @@ export const YIELDS: Partial<Record<InteractKind, { item: ItemId; n: number }[]>
   rock: [{ item: 'rock', n: 1 }],
   snow: [{ item: 'snow', n: 1 }],
   water: [{ item: 'waterRaw', n: 1 }],
+  berries: [{ item: 'berries', n: 2 }],
 };
 
 export const WRECK_LOOT: { item: ItemId; n: number }[] = [
@@ -85,6 +89,10 @@ export function buildInteractables(seed: number, props: Prop[]): Interactable[] 
       list.push({ id: id++, kind: 'bark', x: p.x, z: p.z, uses: 2 });
     } else if (p.kind === 'rock' && r < 0.6) {
       list.push({ id: id++, kind: 'rock', x: p.x, z: p.z, uses: 2 });
+    }
+    if (p.kind === 'birch' && r > 0.85) {
+      // berry scrub on bog edges / open ground
+      list.push({ id: id++, kind: 'berries', x: p.x, z: p.z, uses: 3 });
     }
   }
   // stream access points every ~45 m

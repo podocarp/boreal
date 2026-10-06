@@ -19,7 +19,10 @@ export type ItemId =
   | 'flareGun'
   | 'flare'
   | 'ductTape'
-  | 'berries';
+  | 'berries'
+  | 'meat'
+  | 'meatCooked'
+  | 'cordage';
 
 export interface ItemDef {
   id: ItemId;
@@ -49,6 +52,9 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   flare: { id: 'flare', label: 'Flare', stack: 2, weight: 0.15, key: true },
   ductTape: { id: 'ductTape', label: 'Duct tape', stack: 2, weight: 0.25, key: false },
   berries: { id: 'berries', label: 'Berries', stack: 8, weight: 0.15, key: false },
+  meat: { id: 'meat', label: 'Small game (raw)', stack: 4, weight: 0.8, key: false },
+  meatCooked: { id: 'meatCooked', label: 'Cooked meat', stack: 4, weight: 0.6, key: false },
+  cordage: { id: 'cordage', label: 'Cordage', stack: 4, weight: 0.2, key: false },
 };
 
 export type Inventory = Partial<Record<ItemId, number>>;
