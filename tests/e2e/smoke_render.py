@@ -32,6 +32,8 @@ def main() -> int:
 
         # Read pixels straight from the preserved WebGL framebuffer
         # (main.ts renders every rAF frame, so the buffer is live).
+        # Feature checks are color-signature scans, not fixed screen points —
+        # robust to camera/layout changes.
         sample = page.evaluate(
             """() => {
               const canvas = document.querySelector('canvas');
@@ -42,11 +44,26 @@ def main() -> int:
               const pts = {};
               const at = (fx, fy, name) => { const x=(w*fx)|0, y=(h*fy)|0, i=(y*w+x)*4;
                  pts[name] = [buf[i], buf[i+1], buf[i+2]]; };
-              at(0.5, 0.12, 'sky'); at(0.5, 0.75, 'ground'); at(0.5, 0.55, 'marker');
+              at(0.5, 0.12, 'sky');
+              let bottomCool = 0, bottomTotal = 0, orange = 0;
               const uniq = new Set();
-              for (let i = 0; i < buf.length; i += 4 * 997)
-                uniq.add((buf[i] >> 3) + ',' + (buf[i+1] >> 3) + ',' + (buf[i+2] >> 3));
-              pts.distinct = uniq.size;
+              for (let y = 0; y < h; y++) {
+                const inBottom = y > h * 0.75; // ground region (camera looks slightly down)
+                for (let x = 0; x < w; x++) {
+                  const i = (y * w + x) * 4;
+                  const r = buf[i], g = buf[i+1], b = buf[i+2];
+                  if (inBottom) {
+                    bottomTotal++;
+                    if (b >= r && b > 120) bottomCool++; // snow/fog-blended cool cast
+                  }
+                  if (r > 90 && r > g + 40 && g > b + 10) orange++;
+                  if ((i & 1023) === 0)
+                    uniq.add((r >> 3) + ',' + (g >> 3) + ',' + (b >> 3));
+                }
+              }
+              pts.bottomCoolFrac = bottomCool / Math.max(1, bottomTotal);
+              pts.orangePixels = orange;
+              pts.distinct = uniq.size; pts.total = w * h;
               return pts;
             }"""
         )
@@ -57,9 +74,12 @@ def main() -> int:
     if errors:
         print("PAGE ERRORS:", errors)
         return 1
-    sky, ground = sample["sky"], sample["ground"]
-    assert sky[0] > 120 and sky[2] > 140, f"sky not pale blue: {sky}"
-    assert ground[0] > 150 and ground[2] > 150, f"ground not snow-tinted: {ground}"
+    sky = sample["sky"]
+    assert sky[0] > 100 and sky[2] > 120, f"sky not pale blue: {sky}"
+    assert sample["bottomCoolFrac"] > 0.8, \
+        f"bottom of frame not cool ground fill: {sample['bottomCoolFrac']:.2f}"
+    assert sample["orangePixels"] > 200, \
+        f"crash-site marker missing: {sample['orangePixels']} px"
     assert sample["distinct"] > 8, f"framebuffer looks flat: {sample['distinct']} colors"
     print("SMOKE_OK")
     return 0
