@@ -122,6 +122,7 @@ function frame(now: number) {
     updateSky(world, scene, sun, hemi, fog);
     bundle.playerMesh.position.set(world.player.x, world.player.y, world.player.z);
     bundle.playerMesh.rotation.y = world.player.yaw;
+    syncFireMeshes();
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
     return;
