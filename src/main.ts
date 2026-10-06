@@ -70,8 +70,11 @@ function frame(now: number) {
   const dtReal = Math.min((now - last) / 1000, 0.25);
   last = now;
   if (paused) {
-    // keep framebuffer + sky live (hour may be scripted), but don't touch state
+    // keep framebuffer + sky + player pose live (state may be scripted),
+    // but don't advance the sim
     updateSky(world, scene, sun, hemi, fog);
+    bundle.playerMesh.position.set(world.player.x, world.player.y, world.player.z);
+    bundle.playerMesh.rotation.y = world.player.yaw;
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
     return;

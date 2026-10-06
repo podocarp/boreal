@@ -24,8 +24,8 @@ export const CAM = {
   DIST_MIN: 1.2,
   DIST_BASE: 2.1,
   DIST_SPRINT_BONUS: 0.35,
-  PITCH_MIN: -0.61, // ~-35°
-  PITCH_MAX: 1.22, // ~+70°
+  PITCH_MIN: -1.22, // look up ~70°
+  PITCH_MAX: 1.05, // look down ~60°
   COLLIDE_EASE_IN: 14, // fast pull-in on obstruction
   COLLIDE_EASE_OUT: 3, // slow ease back out (anti-strobe)
   SPRINT_SWING: 0.5, // camera swings behind while sprinting
@@ -33,13 +33,14 @@ export const CAM = {
 };
 
 export function createCamState(): CamState {
-  return { yaw: Math.PI, pitch: -0.12, dist: CAM.DIST_BASE };
+  return { yaw: Math.PI, pitch: 0.15, dist: CAM.DIST_BASE };
 }
 
-/** Apply mouse delta; returns new yaw/pitch clamped. */
+/** Apply mouse delta; returns new yaw/pitch clamped. Convention: pitch>0 looks
+ * DOWN (eye above pivot), pitch<0 looks up. Mouse up (dPitch<0) → look up. */
 export function orbit(c: CamState, dYaw: number, dPitch: number, sens: number): void {
   c.yaw -= dYaw * sens;
-  c.pitch = clamp(c.pitch - dPitch * sens, CAM.PITCH_MIN, CAM.PITCH_MAX);
+  c.pitch = clamp(c.pitch + dPitch * sens, CAM.PITCH_MIN, CAM.PITCH_MAX);
 }
 
 export interface CamPose {
