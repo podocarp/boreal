@@ -110,7 +110,19 @@ def main() -> int:
         assert needs["t1"] < needs["t0"] - 1.5, f"core temp did not drop overnight: {needs}"
         assert any('shivering' in m for m in needs["log"]), f"no shiver event: {needs['log']}"
 
-        # 6) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 6) interaction: scavenge the wreck via the debug API
+        loot = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       b.world.player.x = 0; b.world.player.z = -140;
+                       const ok = b.beginWork();
+                       for (let i = 0; i < 20 * 60; i++) b.step(1); // plenty of time
+                       return { ok, inv: b.world.inventory,
+                                log: b.world.log.slice(-1)[0].msg }; }"""
+        )
+        assert loot["ok"], f"beginWork at wreck failed: {loot}"
+        assert loot["inv"].get("knife") == 1, f"wreck loot missing knife: {loot}"
+
+        # 7) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -124,7 +136,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 7) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 8) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"

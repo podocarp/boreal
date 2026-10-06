@@ -36,7 +36,23 @@ export function createInput(canvas: HTMLCanvasElement): InputState {
   });
 
   (state as unknown as { _held: Set<string> })._held = held;
+  (state as unknown as { _pressed: Set<string> })._pressed = pressed;
+
+  window.addEventListener('keydown', (e) => {
+    if (!e.repeat) pressed.add(e.code);
+  });
   return state;
+}
+
+const pressed = new Set<string>();
+
+/** True once per physical key press (consumes the event). */
+export function consumeKey(code: string): boolean {
+  if (pressed.has(code)) {
+    pressed.delete(code);
+    return true;
+  }
+  return false;
 }
 
 /** Fill s.intent from held keys + current camera yaw (call once per frame). */

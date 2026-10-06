@@ -4,13 +4,15 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { createWorld, feelsLike, step, type WorldState } from './sim/world';
+import { beginWork, createWorld, currentTarget, feelsLike, step, tickWork, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
 import { computeDebuffs } from './sim/needs';
+import { RECIPES, craft, canCraft } from './sim/craft';
+import { INTERACT_LABEL } from './sim/interact';
 import { heightAt } from './sim/terrain';
 import { buildScene } from './render/scene';
 import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
-import { createInput, readIntent } from './input/input';
+import { createInput, readIntent, consumeKey } from './input/input';
 import { updateSky } from './render/daynight';
 import { updateHud } from './ui/hud';
 
@@ -87,7 +89,17 @@ function frame(now: number) {
   while (acc >= CONFIG.SIM_DT) {
     updatePlayer(world, input.intent, CONFIG.SIM_DT);
     step(world, CONFIG.SIM_DT, input.intent.run && world.player.moving);
+    tickWork(world, CONFIG.SIM_DT, computeDebuffs(world.needs).dexterity);
     acc -= CONFIG.SIM_DT;
+  }
+
+  // --- one-shot keys: E = work, Tab = craft (first craftable) ---
+  if (consumeKey('KeyE')) beginWork(world);
+  if (consumeKey('Tab')) {
+    const r = RECIPES.find((x) => canCraft(world.inventory, x));
+    if (r && craft(world.inventory, r)) {
+      world.log.push({ t: world.t, day: world.day, msg: `Crafted: ${r.label}` });
+    }
   }
 
   // --- camera (per-frame, smooth) ---
@@ -105,7 +117,14 @@ function frame(now: number) {
   updateSky(world, scene, sun, hemi, fog);
 
   // --- HUD ---
-  updateHud(world, input.locked, feelsLike(world), computeDebuffs(world.needs));
+  const tgt = currentTarget(world);
+  updateHud(
+    world,
+    input.locked,
+    feelsLike(world),
+    computeDebuffs(world.needs),
+    world.task ? 'Working…' : tgt ? `[E] ${INTERACT_LABEL[tgt.kind]}` : '',
+  );
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -127,6 +146,7 @@ requestAnimationFrame(frame);
     for (let i = 0; i < n; i++) {
       updatePlayer(world, { fwd: 0, strafe: 0, run: false, camYaw: cam.yaw }, dt);
       step(world, dt);
+      tickWork(world, dt, computeDebuffs(world.needs).dexterity);
     }
   },
   /** scripted movement for E2E (bypasses keyboard) */
@@ -136,6 +156,12 @@ requestAnimationFrame(frame);
   orbitCam(dYaw: number, dPitch: number) {
     orbit(cam, dYaw, dPitch, 1);
     applyCamera(0.1); // sync immediately for synchronous E2E assertions
+  },
+  beginWork() { return beginWork(world); },
+  craftFirst() {
+    const r = RECIPES.find((x) => canCraft(world.inventory, x));
+    if (r && craft(world.inventory, r)) return r.id;
+    return null;
   },
   renderOnce() { renderer.render(scene, camera); },
   setPaused(v: boolean) { paused = v; },

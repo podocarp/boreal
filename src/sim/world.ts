@@ -7,6 +7,8 @@ import { CONFIG } from './config';
 import { collidersFrom, scatter, type Collider } from './scatter';
 import type { Zone } from './terrain';
 import { airTempAt, createEnv, createNeeds, tickNeeds, windchill, type Difficulty, type EnvState, type NeedsState } from './needs';
+import { buildInteractables, findTarget, startTask, WRECK_LOOT, YIELDS, type Interactable, type WorkTask } from './interact';
+import { invAdd, invCanAdd, type Inventory } from './items';
 
 export interface WorldState {
   seed: number;
@@ -33,6 +35,9 @@ export interface WorldState {
   log: { t: number; day: number; msg: string }[];
   /** set when the run ends */
   dead?: { cause: string; detail: string };
+  inventory: Inventory;
+  interactables: Interactable[];
+  task: WorkTask | null;
 }
 
 export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldState {
@@ -48,6 +53,9 @@ export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldS
     env: createEnv(),
     difficulty,
     log: [{ t: 0, day: 1, msg: 'You crawl from the wreck. The radio is dead. Search pattern passes near day 7.' }],
+    inventory: {},
+    interactables: buildInteractables(seed, props),
+    task: null,
   };
 }
 
@@ -90,6 +98,64 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
 /** feels-like temp at player (HUD). */
 export function feelsLike(w: WorldState): number {
   return windchill(w.env.airTempC, w.env.windKmh);
+}
+
+/** What can the player interact with right now? (HUD prompt) */
+export function currentTarget(w: WorldState): Interactable | null {
+  if (w.task) return null;
+  // snow is always available as a fallback target; container is checked at beginWork
+  return findTarget(w.player.x, w.player.z, w.interactables, true);
+}
+
+/** Begin a work task on the nearest target. Returns false if nothing to do. */
+export function beginWork(w: WorldState): boolean {
+  if (w.dead || w.task) return false;
+  const t = currentTarget(w);
+  if (!t) return false;
+  if (t.kind === 'snow' || t.kind === 'water') {
+    const hasContainer = (w.inventory.barkContainer ?? 0) > 0 || (w.inventory.tinCup ?? 0) > 0;
+    if (!hasContainer) {
+      pushLog(w, 'You need a container (tin cup, bark container) for that.');
+      return false;
+    }
+  }
+  w.task = startTask(t);
+  return true;
+}
+
+/** Advance the active work task; completes with yields when done.
+ * dexterity debuff slows work; moving cancels it. */
+export function tickWork(w: WorldState, dt: number, dexterity: number): void {
+  if (!w.task) return;
+  if (w.player.moving) {
+    w.task = null; // work requires standing still
+    return;
+  }
+  w.task.remaining -= dt * Math.max(0.25, dexterity);
+  if (w.task.remaining > 0) return;
+
+  const target =
+    w.task.targetId === -1
+      ? ({ id: -1, kind: 'snow', x: w.player.x, z: w.player.z, uses: 99 } as Interactable)
+      : w.interactables.find((i) => i.id === w.task!.targetId);
+  w.task = null;
+  if (!target) return;
+
+  const yields = target.kind === 'wreck' ? WRECK_LOOT : YIELDS[target.kind] ?? [];
+  let gotAny = false;
+  for (const y of yields) {
+    if (invCanAdd(w.inventory, y.item, y.n)) {
+      invAdd(w.inventory, y.item, y.n);
+      gotAny = true;
+    } else {
+      pushLog(w, `No room for ${y.item}.`);
+    }
+  }
+  if (gotAny && target.id !== -1) target.uses -= 1;
+  if (gotAny) {
+    const names = yields.map((y) => `${y.n}× ${y.item}`).join(', ');
+    pushLog(w, `Collected: ${names}`);
+  }
 }
 
 /** Deterministic RNG (mulberry32). Sim code must use this, never Math.random. */
