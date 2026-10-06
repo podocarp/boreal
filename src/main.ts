@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { beginWork, boilWater, buildShelter, checkSnares, createWorld, currentTarget, drink, eat, feedFire, feelsLike, fish, lightFire, setSnareAction, step, tickWork, toggleSleep, treatWound, cook, type WorldState } from './sim/world';
+import { beginWork, boilWater, buildShelter, checkSnares, createWorld, currentTarget, drink, eat, feedFire, feelsLike, fireFlare, fish, lightFire, setSnareAction, signalSmoke, step, tickWork, toggleSleep, treatWound, cook, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
 import { computeDebuffs } from './sim/needs';
 import { RECIPES, craft, canCraft } from './sim/craft';
@@ -14,7 +14,7 @@ import { buildScene } from './render/scene';
 import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
 import { createInput, readIntent, consumeKey, isHeld } from './input/input';
 import { updateSky } from './render/daynight';
-import { updateHud } from './ui/hud';
+import { updateHud, hideEndScreen } from './ui/hud';
 
 let world: WorldState = createWorld(1);
 let cam: CamState = createCamState();
@@ -269,6 +269,13 @@ function frame(now: number) {
   if (consumeKey('KeyV')) fish(world);
   if (consumeKey('KeyB')) cook(world);
   if (consumeKey('KeyT')) treatWound(world);
+  if (consumeKey('KeyH')) fireFlare(world);
+  if (consumeKey('KeyJ')) signalSmoke(world);
+  if (consumeKey('Enter') && (world.dead || world.rescued)) {
+    hideEndScreen();
+    world = createWorld(world.seed);
+    cam = createCamState();
+  }
   world.shouting = isHeld(input, 'Space'); // hoo-hoo! repels wolves
   syncFireMeshes();
   syncShelterMeshes();
@@ -313,7 +320,10 @@ requestAnimationFrame(frame);
   reset(seed = 1) {
     world = createWorld(seed);
     cam = createCamState();
+    hideEndScreen();
   },
+  fireFlare() { return fireFlare(world); },
+  signalSmoke() { return signalSmoke(world); },
   step(n = 1, dt = CONFIG.SIM_DT) {
     for (let i = 0; i < n; i++) {
       updatePlayer(world, { fwd: 0, strafe: 0, run: false, camYaw: cam.yaw }, dt);

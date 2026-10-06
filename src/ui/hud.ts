@@ -7,6 +7,43 @@ const el = document.getElementById('hud')!;
 let acc = 0;
 let lastText = '';
 
+// --- end screen (death / rescue summary) ---
+const endEl = document.createElement('div');
+endEl.style.cssText =
+  'position:absolute;inset:0;display:none;align-items:center;justify-content:center;' +
+  'background:rgba(6,10,16,0.82);color:#e8eef4;font:16px/1.6 monospace;white-space:pre-wrap;';
+el.parentElement?.appendChild(endEl);
+let endShown = false;
+
+export function showEndScreen(w: WorldState): void {
+  if (endShown) return;
+  endShown = true;
+  const rescued = w.rescued;
+  const title = rescued
+    ? `RESCUED — DAY ${rescued.day} (${rescued.kind})`
+    : `YOU DIED — ${w.dead?.cause.toUpperCase() ?? 'EXPOSURE'}`;
+  const sub = rescued ? rescued.detail : (w.dead?.detail ?? '');
+  const highlights = w.log
+    .filter((e) => /fire|shelter|wolf|snare|fish|rescu|storm|flare|smoke|died|RESCUED/i.test(e.msg))
+    .slice(-10)
+    .map((e) => `Day ${e.day}: ${e.msg}`);
+  endEl.textContent = [
+    title,
+    sub,
+    '',
+    `Survived ${w.day - 1} full days, ${Math.floor(w.hourOfDay)} h into day ${w.day}.`,
+    ...highlights,
+    '',
+    'Press Enter to try again.',
+  ].join('\n');
+  endEl.style.display = 'flex';
+}
+
+export function hideEndScreen(): void {
+  endShown = false;
+  endEl.style.display = 'none';
+}
+
 function bar(v: number, label: string): string {
   const n = Math.round(v / 10);
   return `${label} ${'█'.repeat(n)}${'░'.repeat(10 - n)}`;
@@ -52,7 +89,7 @@ export function updateHud(
   if (inv) lines.push(inv);
   const logTail = w.log.slice(-1)[0];
   if (logTail) lines.push(`“${logTail.msg}”`);
-  if (w.dead) lines.push(`YOU DIED — ${w.dead.cause.toUpperCase()} (${w.dead.detail})`);
+  if (w.dead || w.rescued) showEndScreen(w);
   const text = lines.join('\n');
   if (text !== lastText) {
     el.textContent = text;

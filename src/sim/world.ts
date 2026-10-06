@@ -16,6 +16,9 @@ import {
   type FishHole, type Injury, type Snare, type Wolf,
 } from './dangers';
 import {
+  checkCollapse, checkPass, createRescue, type DetectionInput, type RescueState,
+} from './rescue';
+import {
   activeStorm,
   canSleep,
   scoreSite,
@@ -74,6 +77,15 @@ export interface WorldState {
   wolvesOut: boolean;
   /** serializable RNG stream counter (mix with seed per roll) */
   rngN: number;
+  rescue: RescueState;
+  /** signal fire: a fire flagged for smoke (green boughs added) */
+  signalFireId: number | null;
+  /** game-hours since the flare was fired (null = never) */
+  flareAgeH: number | null;
+  /** game-hours since the player last moved (tracks in snow) */
+  stillH: number;
+  /** run ended in rescue */
+  rescued?: { day: number; kind: string; detail: string };
 }
 
 export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldState {
@@ -105,6 +117,10 @@ export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldS
     shouting: false,
     wolvesOut: false,
     rngN: 0,
+    rescue: createRescue(),
+    signalFireId: null,
+    flareAgeH: null,
+    stillH: 0,
   };
 }
 
@@ -143,7 +159,11 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
   w.env.windKmh =
     CONFIG.WORLD.WIND_BASE_KMH * zoneWind * (night ? CONFIG.CLIMATE.WIND_NIGHT_MUL : 1) * stormWindMul(storm);
 
-  if (!w.dead) {
+  // flare aging + stillness (tracks in snow fade)
+  if (w.flareAgeH !== null) w.flareAgeH += dtGameH(w, dt);
+  w.stillH = w.player.moving ? 0 : w.stillH + dtGameH(w, dt);
+
+  if (!w.dead && !w.rescued) {
     // storm wetness: wet snow soaks clothing unless sheltered
     if (storm) {
       const sheltered = shelterWarmthAt(w.shelters, w.player.x, w.player.z) > 0.5 ||
@@ -254,7 +274,47 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
         pushLog(w, 'Fever takes you. The wound won.');
       }
     }
+
+    // --- S7: rescue search passes + collapse deadline ---
+    const pass = checkPass(w.rescue, w.day, w.hourOfDay, storm?.severity ?? 0,
+      () => detectionInput(w), () => roll(w));
+    if (pass.fired) {
+      if (pass.scrubbed) {
+        pushLog(w, `The ${pass.kind} search is scrubbed — whiteout. No flight.`);
+      } else if (pass.spotted) {
+        w.rescued = {
+          day: w.day,
+          kind: pass.kind ?? 'dawn',
+          detail: 'The pilot sees your smoke and banks toward you.',
+        };
+        pushLog(w, 'RESCUED — engine noise swells out of the south.');
+      } else {
+        pushLog(w, `The ${pass.kind} pass goes overhead. They don't see you.`);
+      }
+    }
+    if (!w.rescued && checkCollapse(w.rescue, w.day)) {
+      w.dead = { cause: 'exposure', detail: 'Ten days. The search gave up. So did you.' };
+      pushLog(w, 'Day 10. No engines. The cold wins by default.');
+    }
   }
+}
+
+/** What the pilot would see at a search pass. */
+export function detectionInput(w: WorldState): DetectionInput {
+  const signal = w.signalFireId !== null
+    ? w.fires.find((f) => f.id === w.signalFireId && f.lit) ?? null
+    : null;
+  const anyFire = w.fires.some((f) => f.lit);
+  const open = w.player.zone === 'lake' || w.player.zone === 'ridge';
+  return {
+    signalSmoke: signal !== null,
+    anyFire,
+    flareUsedRecently: w.flareAgeH !== null && w.flareAgeH < CONFIG.RESCUE.FLARE_WINDOW_H,
+    openGround: open,
+    onRidge: w.player.zone === 'ridge',
+    shelterVisible: w.shelters.some((s) => s.complete),
+    movedRecently: w.stillH < 1,
+  };
 }
 
 /** feels-like temp at player (HUD). */
@@ -548,6 +608,26 @@ export function eat2(w: WorldState): boolean {
     return true;
   }
   return false;
+}
+
+/** Fire the flare gun (one shot — near-certain detection at a pass). */
+export function fireFlare(w: WorldState): boolean {
+  if (w.dead || w.rescued) return false;
+  if (!invHas(w.inventory, 'flare', 1) || !invHas(w.inventory, 'flareGun', 1)) return false;
+  invRemove(w.inventory, 'flare', 1);
+  w.flareAgeH = 0;
+  pushLog(w, 'The flare screams up into the grey. One shot. Make it count.');
+  return true;
+}
+
+/** Throw green boughs on a fire → white smoke column (signal fire). */
+export function signalSmoke(w: WorldState): boolean {
+  const f = nearestFire(w, 3);
+  if (!f || !f.lit || !invHas(w.inventory, 'boughs', 2)) return false;
+  invRemove(w.inventory, 'boughs', 2);
+  w.signalFireId = f.id;
+  pushLog(w, 'Green boughs on the coals — a fat column of white smoke rises.');
+  return true;
 }
 
 // ---------------------------------------------------------------------------

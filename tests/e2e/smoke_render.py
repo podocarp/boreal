@@ -189,7 +189,46 @@ def main() -> int:
         assert dangers["fled"], f"wolves did not flee fire+shouting: {dangers}"
         assert dangers["injuries"] == 0, f"wounded despite repelling: {dangers}"
 
-        # 10) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 10) golden path: loot wreck → fire → shelter → signal smoke → day-7 rescue
+        golden = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       const w = b.world;
+                       // keep the runner alive while it fast-forwards days
+                       const keep = () => { w.needs.hydration = 100; w.needs.hunger = 100;
+                         w.needs.energy = 100; w.needs.coreTemp = 37; w.needs.wetness = 0;
+                         w.needs.health = 100; w.wolves = []; };
+                       // loot the wreck at the crash site
+                       w.player.x = 0; w.player.z = -140;
+                       b.beginWork();
+                       for (let i = 0; i < 200; i++) { keep(); b.step(1); }
+                       const looted = (w.inventory.knife || 0) > 0 && (w.inventory.tinCup || 0) > 0;
+                       // signal fire on the open lake shore
+                       w.inventory.boughs = (w.inventory.boughs || 0) + 6;
+                       w.inventory.deadfall = (w.inventory.deadfall || 0) + 6;
+                       w.fires.push({ id: 5, x: 0, z: -140, fuel: 100, lit: true });
+                       const smoke = b.signalSmoke();
+                       // fast-forward to the day-7 dawn pass
+                       w.day = 7; w.hourOfDay = 8.5;
+                       for (let i = 0; i < 40 * 120 && !w.rescued && !w.dead; i++) {
+                         w.player.x = 0; w.player.z = -140; keep(); b.step(1);
+                       }
+                       return { looted, smoke, rescued: !!w.rescued,
+                                day: w.rescued ? w.rescued.day : -1, dead: w.dead }; }"""
+        )
+        assert golden["looted"], f"golden path: wreck loot failed: {golden}"
+        assert golden["smoke"], f"golden path: signal smoke failed: {golden}"
+        assert golden["rescued"], f"golden path: not rescued by day 7+: {golden}"
+        assert golden["day"] == 7, f"golden path: rescued late: {golden}"
+
+        # 10b) end screen appears after rescue
+        page.wait_for_timeout(400)
+        end_visible = page.evaluate(
+            "() => { const els = [...document.querySelectorAll('div')];"
+            "  return els.some(e => e.textContent.includes('RESCUED') && e.style.display === 'flex'); }"
+        )
+        assert end_visible, "end screen not shown after rescue"
+
+        # 11) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -203,7 +242,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 11) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 12) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"

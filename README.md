@@ -43,7 +43,23 @@ nix develop --extra-experimental-features 'nix-command flakes' . -c bash -lc \
 | B | Cook meat at fire |
 | T | Treat wound (duct tape, at fire) |
 | 1 / 2 | Drink / eat |
+| H | Fire flare gun (one shot — near-certain at a search pass) |
+| J | Green boughs on fire → signal smoke column |
+| Enter | Restart after death / rescue |
 | Space | Shout "hoo-hoo!" (repels wolves while held) |
+
+## How to play (the 60–90 min run)
+
+You crashed a bush plane on the shore of a subarctic lake, ~60°N, late autumn. Search passes fly days 7–10 at dawn and dusk — **be ready before day 7**.
+
+1. **Loot the wreck** (E at the orange wreckage): knife, tin cup, blanket, flare gun + 1 flare, duct tape, kindling.
+2. **Fire** (F with a tinder bundle — craft from bark; R to feed). Boil/melt water (Q) and stock it; auto-sip handles the sipping.
+3. **Shelter** (G, six steps, needs boughs + deadfall). Site matters: forest edge near the lake beats the windy ridge; don't build under dead standing trees.
+4. **Food**: cordage (Tab craft from bark) → snares by the stream (C, check with X) or fish the pickerel holes (V, dawn/dusk). Cook it (B). Berries are a stopgap.
+5. **Survive the nights**: storms hit days 2 and 4; wolves come nights from day 2 — stay by the fire, shout (Space) if they circle. Treat bites (T) before they infect.
+6. **Signal before the planes come**: throw green boughs on a big fire (J) and sleep near it on the open shore, or save the flare (H) for a pass you can hear. Sleeping in the open all night is a gamble you may lose.
+
+Death ends the run with a summary of how and when. Rescue ends it with the same, warmer.
 
 World: crash site on the lake shore (orange wreck), spruce/birch forest, stream to the west ridge, muskeg bog to the north (slows you), rocks on the ridge, berry scrub, hare sign along the stream banks, pickerel holes where the stream meets the lake. Day ≈ 12 real minutes; sun rises ~09:00, sets ~17:00. Storms on days 2 and 4; wolves prowl the nights from day 2 — fire and shouting keep them honest.
 

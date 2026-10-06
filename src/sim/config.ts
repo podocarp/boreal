@@ -14,6 +14,10 @@ export const CONFIG = {
     /** Days until the rescue search window opens. */
     RESCUE_WINDOW_DAY: 7,
   },
+  RESCUE: {
+    COLLAPSE_DAY: 10, // day 10 without rescue → exposure-collapse end
+    FLARE_WINDOW_H: 1.0, // flare counts for a pass if used within this window
+  },
 
   WORLD: {
     /** Terrain half-size in meters. */
