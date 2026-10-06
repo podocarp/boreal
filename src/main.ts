@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from './sim/config';
-import { beginWork, boilWater, createWorld, currentTarget, drink, eat, feedFire, feelsLike, lightFire, step, tickWork, type WorldState } from './sim/world';
+import { beginWork, boilWater, buildShelter, createWorld, currentTarget, drink, eat, feedFire, feelsLike, lightFire, step, tickWork, toggleSleep, type WorldState } from './sim/world';
 import { updatePlayer } from './sim/player';
 import { computeDebuffs } from './sim/needs';
 import { RECIPES, craft, canCraft } from './sim/craft';
@@ -64,6 +64,68 @@ function syncFireMeshes(): void {
     if (!seen.has(id)) {
       scene.remove(g.group);
       fireGroups.delete(id);
+    }
+  }
+}
+
+/** Shelter visuals: lean-to mesh grows with build step. */
+const shelterGroups = new Map<number, THREE.Group>();
+function syncShelterMeshes(): void {
+  const seen = new Set<number>();
+  for (const s of world.shelters) {
+    seen.add(s.id);
+    let g = shelterGroups.get(s.id);
+    if (!g) {
+      g = new THREE.Group();
+      scene.add(g);
+      shelterGroups.set(s.id, g);
+    }
+    // rebuild children when step changes (cheap: few meshes)
+    const want = s.step;
+    if (g.children.length !== want) {
+      g.clear();
+      const y = heightAt(s.x, s.z);
+      const mat = new THREE.MeshLambertMaterial({ color: 0x3a5c4b, flatShading: true });
+      const wood = new THREE.MeshLambertMaterial({ color: 0x5a4632, flatShading: true });
+      if (want >= 1) {
+        const ridge = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 5), wood);
+        ridge.rotation.z = Math.PI / 2.6;
+        ridge.position.set(0, 1.1, 0);
+        g.add(ridge);
+      }
+      if (want >= 2) {
+        for (let i = -1; i <= 1; i++) {
+          const rib = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.8, 4), wood);
+          rib.rotation.z = Math.PI / 3;
+          rib.position.set(i * 0.7, 0.8, 0);
+          g.add(rib);
+        }
+      }
+      if (want >= 3) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 0.15), mat);
+        wall.rotation.x = -0.5;
+        wall.position.set(0, 0.8, -0.35);
+        g.add(wall);
+      }
+      if (want >= 4) {
+        const mulch = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.5, 0.25),
+          new THREE.MeshLambertMaterial({ color: 0x6b5a3a, flatShading: true }));
+        mulch.rotation.x = -0.5;
+        mulch.position.set(0, 0.85, -0.45);
+        g.add(mulch);
+      }
+      if (want >= 5) {
+        const bed = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.25, 0.9), mat);
+        bed.position.set(0, 0.12, 0.55);
+        g.add(bed);
+      }
+      g.position.set(s.x, y, s.z);
+    }
+  }
+  for (const [id, g] of shelterGroups) {
+    if (!seen.has(id)) {
+      scene.remove(g);
+      shelterGroups.delete(id);
     }
   }
 }
@@ -130,6 +192,13 @@ function frame(now: number) {
 
   // --- sim (fixed timestep) ---
   readIntent(input, cam.yaw);
+  if (world.needs.sleeping) {
+    // asleep: no movement, no work
+    input.intent.fwd = 0;
+    input.intent.strafe = 0;
+    input.intent.run = false;
+    world.task = null;
+  }
   acc += dtReal;
   while (acc >= CONFIG.SIM_DT) {
     updatePlayer(world, input.intent, CONFIG.SIM_DT);
@@ -151,7 +220,10 @@ function frame(now: number) {
   if (consumeKey('KeyQ')) boilWater(world);
   if (consumeKey('Digit1')) drink(world);
   if (consumeKey('Digit2')) eat(world);
+  if (consumeKey('KeyG')) buildShelter(world);
+  if (consumeKey('KeyZ')) toggleSleep(world);
   syncFireMeshes();
+  syncShelterMeshes();
 
   // --- camera (per-frame, smooth) ---
   orbit(cam, input.dYaw, input.dPitch, 0.0022);
@@ -209,6 +281,8 @@ requestAnimationFrame(frame);
     applyCamera(0.1); // sync immediately for synchronous E2E assertions
   },
   beginWork() { return beginWork(world); },
+  buildShelter() { return buildShelter(world); },
+  toggleSleep() { return toggleSleep(world); },
   lightFire() { return lightFire(world, computeDebuffs(world.needs).dexterity); },
   feedFire() { return feedFire(world); },
   boilWater() { return boilWater(world); },

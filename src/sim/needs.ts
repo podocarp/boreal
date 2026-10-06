@@ -170,10 +170,7 @@ export function tickNeeds(
 
   // --- energy ---
   if (n.sleeping) {
-    const warm = n.coreTemp > T.COLD_C;
-    const fed = n.hunger > 25;
-    const restore = N.SLEEP_RESTORE_PER_H * (warm ? 1 : 0.35) * (fed ? 1 : 0.6);
-    n.energy = clamp(n.energy + restore * h, 0, 100);
+    // restore is applied by world.step (sleepRestorePerH) — needs stays neutral
   } else {
     let drain = N.ENERGY_DECAY_PER_H;
     if (opts.sprinting) drain *= 2.2;

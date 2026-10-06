@@ -145,7 +145,28 @@ def main() -> int:
         assert fire["boiled"], f"boil failed: {fire}"
         assert fire["t1"] > 36, f"fire night not survivable: {fire}"
 
-        # 8) day/night: sun intensity at noon >> midnight (rAF frames update sky)
+        # 8) shelter + sleep loop: build 6 steps, sleep warm, wake rested
+        shelter = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       b.world.player.x = -40; b.world.player.z = -60;
+                       const inv = b.world.inventory;
+                       inv.boughs = 12; inv.deadfall = 4;
+                       for (let i = 0; i < 6; i++) {
+                         b.buildShelter();
+                         for (let k = 0; k < 300; k++) b.step(1);
+                       }
+                       const done = b.world.shelters[0].complete;
+                       b.world.needs.energy = 30; b.world.needs.hunger = 80;
+                       b.world.hourOfDay = 22;
+                       b.toggleSleep();
+                       for (let k = 0; k < 6 * 120; k++) b.step(1);
+                       return { done, sleeping: b.world.needs.sleeping,
+                                energy: b.world.needs.energy }; }"""
+        )
+        assert shelter["done"], f"shelter not complete: {shelter}"
+        assert shelter["energy"] > 85, f"sheltered sleep not restorative: {shelter}"
+
+        # 9) day/night: sun intensity at noon >> midnight (rAF frames update sky)
         def sun_intensity(hour: float) -> float:
             page.evaluate(f"() => {{ window.__boreal.world.hourOfDay = {hour}; }}")
             page.wait_for_timeout(400)
@@ -159,7 +180,7 @@ def main() -> int:
         night = sun_intensity(1)
         assert noon > night * 3, f"day/night not working: noon={noon} night={night}"
 
-        # 9) framebuffer pixel signatures at noon, from two deterministic poses.
+        # 10) framebuffer pixel signatures at noon, from two deterministic poses.
         # Freeze the loop first so scripted poses survive to readPixels.
         page.evaluate(
             "() => { const b = window.__boreal; b.setPaused(true); b.reset(1); b.world.hourOfDay = 13; }"

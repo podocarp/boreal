@@ -39,10 +39,12 @@ export function updateHud(
   if (w.needs.hydration < 25) warn.push('THIRSTY');
   if (w.needs.wetness > 0.5) warn.push('WET');
   const lines = [
-    `DAY ${w.day}  ${hh}:${mm}  ${w.env.airTempC.toFixed(0)}°C (feels ${feelsLikeC.toFixed(0)}°C)  ${w.player.zone}`,
+    w.needs.sleeping
+      ? `💤 SLEEPING — DAY ${w.day} ${hh}:${mm}`
+      : `DAY ${w.day}  ${hh}:${mm}  ${w.env.airTempC.toFixed(0)}°C (feels ${feelsLikeC.toFixed(0)}°C)  ${w.player.zone}`,
     `HP ${bar(w.needs.health, '♥')}  ${bar(w.needs.hydration, '~')}  ${bar(w.needs.hunger, '✚')}  ${bar(w.needs.energy, '☾')}`,
     warn.length ? `⚠ ${warn.join(' · ')}` : locked
-      ? 'WASD · Shift sprint · E work · Tab craft · F fire · R feed · Q boil · 1 drink · 2 eat'
+      ? 'WASD · E work · Tab craft · F fire · R feed · Q boil · G shelter · Z sleep · 1 drink · 2 eat'
       : 'BOREAL — click to take control',
   ];
   if (prompt) lines.push(prompt);

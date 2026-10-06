@@ -30,6 +30,7 @@ export interface WorkTask {
   targetId: number;
   remaining: number; // game-hours of work left
   total: number;
+  kind: 'gather' | 'shelter';
 }
 
 export const INTERACT_LABEL: Record<InteractKind, string> = {
@@ -124,5 +125,5 @@ export function findTarget(
 export function startTask(target: Interactable): WorkTask {
   const hours = WORK_HOURS[target.kind];
   const secs = hours * CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
-  return { targetId: target.id, remaining: secs, total: secs };
+  return { targetId: target.id, remaining: secs, total: secs, kind: 'gather' };
 }

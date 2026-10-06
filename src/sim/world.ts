@@ -10,6 +10,20 @@ import { airTempAt, createEnv, createNeeds, tickNeeds, windchill, type Difficult
 import { buildInteractables, findTarget, startTask, WRECK_LOOT, YIELDS, type Interactable, type WorkTask } from './interact';
 import { invAdd, invCanAdd, invRemove, invHas, type Inventory } from './items';
 import { addFuel, frictionRoll, maxWarmth, tickFire, type Fire } from './fire';
+import {
+  activeStorm,
+  canSleep,
+  scoreSite,
+  shelterWarmthAt,
+  shouldWake,
+  sleepRestorePerH,
+  SHELTER_STEPS,
+  stormWindMul,
+  stormWetnessPerH,
+  createSleep,
+  type Shelter,
+  type SleepState,
+} from './shelter';
 
 export interface WorldState {
   seed: number;
@@ -41,6 +55,9 @@ export interface WorldState {
   task: WorkTask | null;
   fires: Fire[];
   nextFireId: number;
+  shelters: Shelter[];
+  nextShelterId: number;
+  sleep: SleepState;
 }
 
 export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldState {
@@ -61,12 +78,20 @@ export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldS
     task: null,
     fires: [],
     nextFireId: 1,
+    shelters: [],
+    nextShelterId: 1,
+    sleep: createSleep(),
   };
 }
 
 function pushLog(w: WorldState, msg: string): void {
   w.log.push({ t: w.t, day: w.day, msg });
   if (w.log.length > 200) w.log.shift();
+}
+
+/** dt (real sim seconds) → game hours. */
+function dtGameH(_w: WorldState, dt: number): number {
+  return dt / CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
 }
 
 /** Advance the world by one fixed tick (CONFIG.SIM_DT seconds). Pure w.r.t. args. */
@@ -84,15 +109,47 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
   w.env.airTempC = airTempAt(w.hourOfDay, CONFIG.WORLD.TEMP_BASE_C, CONFIG.CLIMATE.TEMP_SWING_C);
   const zoneWind =
     w.player.zone === 'lake' || w.player.zone === 'ridge' ? 1.35 : w.player.zone === 'forest' ? 0.6 : 1.0;
-  w.env.windKmh = CONFIG.WORLD.WIND_BASE_KMH * zoneWind * (night ? CONFIG.CLIMATE.WIND_NIGHT_MUL : 1);
+  const storm = activeStorm(w.day, w.hourOfDay);
+  w.env.windKmh =
+    CONFIG.WORLD.WIND_BASE_KMH * zoneWind * (night ? CONFIG.CLIMATE.WIND_NIGHT_MUL : 1) * stormWindMul(storm);
 
   if (!w.dead) {
+    // storm wetness: wet snow soaks clothing unless sheltered
+    if (storm) {
+      const sheltered = shelterWarmthAt(w.shelters, w.player.x, w.player.z) > 0.5 ||
+        w.fires.some((f) => f.lit && Math.hypot(f.x - w.player.x, f.z - w.player.z) < 3);
+      const gain = stormWetnessPerH(storm) * (sheltered ? 0.25 : 1) * dtGameH(w, dt);
+      w.needs.wetness = Math.min(1, w.needs.wetness + gain);
+    }
+    // drying by fire (slow)
+    const nearFire = w.fires.some((f) => f.lit && Math.hypot(f.x - w.player.x, f.z - w.player.z) < 3);
+    if (nearFire && w.needs.wetness > 0) {
+      w.needs.wetness = Math.max(0, w.needs.wetness - 0.1 * dtGameH(w, dt));
+    }
+
     // fires burn down + warmth at player
-    const dtGameH = dt / CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
     for (const f of w.fires) {
-      if (tickFire(f, dtGameH, w.env.windKmh)) pushLog(w, 'Your fire has gone out.');
+      if (tickFire(f, dtGameH(w, dt), w.env.windKmh)) pushLog(w, 'Your fire has gone out.');
     }
     w.env.fireWarmth = maxWarmth(w.fires, w.player.x, w.player.z);
+    w.env.shelterInsul = shelterWarmthAt(w.shelters, w.player.x, w.player.z);
+
+    // sleep: energy restore scaled by warmth/food; sleeping in the cold is the gamble
+    if (w.needs.sleeping) {
+      w.sleep.hours += dtGameH(w, dt);
+      const warm =
+        w.needs.coreTemp > CONFIG.THERMO.COLD_C ||
+        w.env.shelterInsul > 0.5 ||
+        w.env.fireWarmth > 0.25;
+      const restore = sleepRestorePerH(warm, w.needs.hunger > 25);
+      w.needs.energy = Math.min(100, w.needs.energy + restore * dtGameH(w, dt));
+      const wake = shouldWake(w.sleep, w.needs.energy, w.hourOfDay);
+      if (wake) {
+        w.needs.sleeping = false;
+        w.sleep.active = false;
+        pushLog(w, wake);
+      }
+    }
 
     const res = tickNeeds(w.needs, w.env, dt, {
       moving: w.player.moving,
@@ -150,7 +207,13 @@ export function tickWork(w: WorldState, dt: number, dexterity: number): void {
     w.task.targetId === -1
       ? ({ id: -1, kind: 'snow', x: w.player.x, z: w.player.z, uses: 99 } as Interactable)
       : w.interactables.find((i) => i.id === w.task!.targetId);
+  const wasShelter = w.task.kind === 'shelter';
+  const shelterId = w.task.targetId;
   w.task = null;
+  if (wasShelter) {
+    finishShelterStep(w, shelterId);
+    return;
+  }
   if (!target) return;
 
   const yields = target.kind === 'wreck' ? WRECK_LOOT : YIELDS[target.kind] ?? [];
@@ -300,5 +363,92 @@ export function eat(w: WorldState): boolean {
   if (!invHas(w.inventory, 'berries', 1)) return false;
   invRemove(w.inventory, 'berries', 1);
   w.needs.hunger = Math.min(100, w.needs.hunger + 10);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Shelter & sleep actions (S5)
+// ---------------------------------------------------------------------------
+
+/** Cost per build step (materials). Step order: site/frame/ribs/insulation/mulch/bedding. */
+const SHELTER_STEP_COST: { boughs?: number; deadfall?: number }[] = [
+  {}, // site: just choose + clear
+  { deadfall: 2 }, // ridgepole frame
+  { deadfall: 2 }, // ribbing
+  { boughs: 6 }, // bough insulation (thickness matters)
+  {}, // debris mulch (free, gathered on site)
+  { boughs: 6 }, // bedding platform (critical: ground steal)
+];
+
+/** Start the next shelter build step at the player's position. */
+export function buildShelter(w: WorldState): 'started' | 'complete' | 'materials' | 'far' | 'busy' {
+  if (w.dead || w.task) return 'busy';
+  let s = w.shelters.find((sh) => Math.hypot(sh.x - w.player.x, sh.z - w.player.z) < 3);
+  if (!s) {
+    if (w.shelters.length > 0 && !w.shelters.some((sh) => sh.step < SHELTER_STEPS.length)) {
+      // all shelters complete; starting a new one is allowed anywhere
+    }
+    const cost = SHELTER_STEP_COST[0];
+    if (!hasCost(w.inventory, cost)) return 'materials';
+    s = {
+      id: w.nextShelterId++,
+      x: w.player.x,
+      z: w.player.z,
+      step: 0,
+      siteQuality: scoreSite(w.player.x, w.player.z, w.seed).total,
+      complete: false,
+    };
+    w.shelters.push(s);
+  }
+  if (s.step >= SHELTER_STEPS.length) return 'complete';
+  const cost = SHELTER_STEP_COST[s.step];
+  if (!hasCost(w.inventory, cost)) return 'materials';
+  w.task = {
+    targetId: s.id,
+    remaining: 0.4 * CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR,
+    total: 0.4 * CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR,
+    kind: 'shelter',
+  };
+  return 'started';
+}
+
+function hasCost(inv: Inventory, cost: { boughs?: number; deadfall?: number }): boolean {
+  if (cost.boughs && !invHas(inv, 'boughs', cost.boughs)) return false;
+  if (cost.deadfall && !invHas(inv, 'deadfall', cost.deadfall)) return false;
+  return true;
+}
+
+function payCost(inv: Inventory, cost: { boughs?: number; deadfall?: number }): void {
+  if (cost.boughs) invRemove(inv, 'boughs', cost.boughs);
+  if (cost.deadfall) invRemove(inv, 'deadfall', cost.deadfall);
+}
+
+/** Complete a shelter step (called from tickWork when task.kind==='shelter'). */
+function finishShelterStep(w: WorldState, shelterId: number): void {
+  const s = w.shelters.find((x) => x.id === shelterId);
+  if (!s) return;
+  const cost = SHELTER_STEP_COST[s.step];
+  payCost(w.inventory, cost);
+  s.step += 1;
+  s.complete = s.step >= SHELTER_STEPS.length;
+  const label = SHELTER_STEPS[Math.min(s.step, SHELTER_STEPS.length) - 1];
+  pushLog(w, s.complete ? 'Shelter complete — debris walls, bough bedding.' : `Shelter: ${label} done.`);
+}
+
+/** Lie down / get up. Sleeping is possible anywhere — that's the gamble. */
+export function toggleSleep(w: WorldState): boolean {
+  if (w.dead) return false;
+  if (w.needs.sleeping) {
+    w.needs.sleeping = false;
+    w.sleep.active = false;
+    pushLog(w, 'You drag yourself upright.');
+    return false;
+  }
+  if (!canSleep()) return false;
+  w.needs.sleeping = true;
+  w.sleep.active = true;
+  w.sleep.hours = 0;
+  const insul = shelterWarmthAt(w.shelters, w.player.x, w.player.z);
+  pushLog(w, insul > 0.5 ? 'You crawl into the shelter and sleep.' : 'You try to sleep out in the open. Risky.');
   return true;
 }
