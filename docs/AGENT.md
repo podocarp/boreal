@@ -45,6 +45,7 @@ Consequences not chores: slow need decay, auto-sip from carried stock, no click-
 
 ## Post-MVP backlog (not started)
 Trapper's cache discovery · widowmaker scripted hazard · tea/morale · save/load · balance Monte-Carlo (naive vs smart play) · art polish · license choice (currently TBD).
+Interaction-model deltas from docs/RESEARCH-interaction.md NOT yet built (decide with user): direct keys for panic verbs only (T treat / H flare — everything else stays in the wheel) · held-item verb override w/ published tie-break rule (Minecraft) · "make this the default" per object type after repeated menu use (OSRS MES) · rebindable keys. Shipped scheme already matches the report's core spec (labeled context verb + pointer-locked hold-RMB wheel + text labels + reason hints).
 Needs-research deltas not yet built (see RESEARCH-needs-full.md §3): hidden fat-reserve pool buffering hunger · auto-EAT toggle (note: PZ vanilla only ships auto-DRINK; auto-eat is a community mod — our auto-sip is the vanilla-equivalent) · Raft-style craving curve (food more effective when hungrier) · 3-match economy as a hard mode.
 User design note (2026-10-07): PZ separates **fullness** (stomach; drives mood/happiness) from **calories** (drives weight/strength) — salad fills you without nourishing you. If we ever split our single hunger bar, the Arctic-native version is the documented "protein starvation" (full on lean hare, starving for fat) — pairs naturally with the fat-reserve pool; do NOT import PZ's full macro/moodle soup.
 

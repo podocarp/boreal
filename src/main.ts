@@ -302,6 +302,10 @@ function frame(now: number) {
 
   // --- HUD ---
   const tgt = currentTarget(world);
+  // "+N more" affordance (BotW lesson: show what the menu holds before opening)
+  const nMore = world.dead || world.rescued || world.needs.sleeping
+    ? 0
+    : Math.max(0, contextActions(world, actx).length - 1);
   updateHud(
     world,
     input.locked,
@@ -310,8 +314,8 @@ function frame(now: number) {
     world.task
       ? 'Working…'
       : tgt
-        ? `[LMB/E] ${INTERACT_LABEL[tgt.kind]} · hold [RMB] for everything else`
-        : 'hold [RMB] for actions',
+        ? `[LMB/E] ${INTERACT_LABEL[tgt.kind]} · hold [RMB] for ${nMore} more`
+        : `hold [RMB] for ${nMore + 1} actions`,
   );
 
   renderer.render(scene, camera);
