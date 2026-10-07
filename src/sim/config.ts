@@ -50,6 +50,9 @@ export const CONFIG = {
     AUTO_SIP_BELOW: 60, // auto-sip engages below this
     AUTO_SIP_POINTS_PER_H: 35,
     HYDRATION_PER_LITER: 50, // 1 L restores 50 points
+    /** Craving curve (Raft-style): food restores base * (1 + K*(1 - hunger/100)).
+     * Makes grazing pointless and desperate meals huge. 0 disables. */
+    CRAVING_K: 0.8,
     DIFF: { bushman: 0.7, survivorman: 1.3 },
   },
 

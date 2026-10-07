@@ -61,7 +61,7 @@ export function tickFire(f: Fire, dtGameHours: number, windKmh: number): boolean
   if (!f.lit || f.fuel <= 0) return false;
   const stage = fireStage(f);
   // burn rate %/h: small fires burn disproportionately fast
-  const base = [0, 30, 18, 12, 9][stage];
+  const base = [0, 30, 18, 10, 7][stage]; // stage 4 ≈ 14 h: a fed fire lasts the 15 h night
   const windBurn = 1 + Math.max(0, windKmh - 15) * 0.01;
   const before = stage;
   f.fuel = Math.max(0, f.fuel - base * windBurn * dtGameHours);

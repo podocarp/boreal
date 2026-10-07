@@ -135,7 +135,7 @@ function dtGameH(_w: WorldState, dt: number): number {
 }
 
 /** Deterministic roll from the world's RNG stream (serializable). */
-function roll(w: WorldState): number {
+export function roll(w: WorldState): number {
   w.rngN = (w.rngN + 1) | 0;
   return makeRng((w.seed * 0x9e3779b9) ^ (w.rngN * 0x85ebca6b))();
 }
@@ -227,7 +227,7 @@ export function step(w: WorldState, dt = CONFIG.SIM_DT, sprinting = false): void
         w.needs.coreTemp < CONFIG.THERMO.COLD_C ||
         w.needs.health < 60 ||
         w.needs.energy < 20 ||
-        w.needs.sleeping;
+        (w.needs.sleeping && w.needs.health < 50); // sleeping at camp ≠ easy kill; you wake to snarls
       const resW = tickWolves(w.wolves, dt, {
         px: w.player.x,
         pz: w.player.z,
@@ -423,7 +423,7 @@ export function lightFire(w: WorldState, dexterity = 0.7): 'lit' | 'failed' | 'n
     pushLog(w, 'The ember died in your hands. No flame.');
     return 'failed';
   }
-  w.fires.push({ id: w.nextFireId++, x: w.player.x, z: w.player.z, fuel: 15, lit: true });
+  w.fires.push({ id: w.nextFireId++, x: w.player.x, z: w.player.z, fuel: 25, lit: true });
   pushLog(w, 'The tinder catches — fire!');
   return 'lit';
 }
@@ -587,20 +587,26 @@ export function treatWound(w: WorldState): boolean {
 }
 
 /** Eat: cooked meat >> berries > raw meat (risk). */
+/** Craving multiplier: hungrier => same food restores more (Raft-style). */
+export function cravingMul(hunger: number): number {
+  return 1 + CONFIG.NEEDS.CRAVING_K * (1 - hunger / 100);
+}
+
 export function eat2(w: WorldState): boolean {
+  const crave = cravingMul(w.needs.hunger);
   if (invHas(w.inventory, 'meatCooked', 1)) {
     invRemove(w.inventory, 'meatCooked', 1);
-    w.needs.hunger = Math.min(100, w.needs.hunger + 45);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 45 * crave);
     return true;
   }
   if (invHas(w.inventory, 'berries', 1)) {
     invRemove(w.inventory, 'berries', 1);
-    w.needs.hunger = Math.min(100, w.needs.hunger + 10);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 10 * crave);
     return true;
   }
   if (invHas(w.inventory, 'meat', 1)) {
     invRemove(w.inventory, 'meat', 1);
-    w.needs.hunger = Math.min(100, w.needs.hunger + 30);
+    w.needs.hunger = Math.min(100, w.needs.hunger + 30 * crave);
     if (roll(w) < 0.5) {
       pushLog(w, 'Raw meat. Your gut knows it.');
       w.needs.hydration = Math.max(0, w.needs.hydration - 10);

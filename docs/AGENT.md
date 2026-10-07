@@ -5,7 +5,9 @@ Read-me-first for any agent (fresh subagent or resumed-after-compaction). This f
 ## What this is
 3D browser wilderness-survival game (stylized low-poly, no animations, Skyrim/Dinkum over-shoulder camera). Scenario: bush-plane crash, NWT subarctic ~60°N, late autumn, inspired by Les Stroud's Survivorman. One 60–90 min run: survive to the day 7–10 search window, signal, get rescued — or die with a summary.
 
-**Status: MVP COMPLETE.** Tags `sprint-0`…`sprint-7` + `v0.1-mvp` pushed to https://github.com/podocarp/boreal (branch `main`). 77 unit tests green, tsc clean, headless E2E golden path (loot→fire→signal→day-7 rescue) green.
+**Status: MVP COMPLETE + Sprint 8 (balance) in progress.** Tags `sprint-0`…`sprint-7` + `v0.1-mvp` pushed to https://github.com/podocarp/boreal (branch `main`). 80 unit tests green, tsc clean, headless E2E golden path (loot→fire→signal→day-7 rescue) green.
+
+Sprint 8 (user-approved, deliberately small): **craving curve** (`NEEDS.CRAVING_K`, food restores more when hungrier — no new UI) + **Monte-Carlo balance harness** (`npm run balance [seeds]` → `tests/sim/balance.ts`; naive/average/optimal bots play full headless games; prints rescue %, death causes, death days). Harness already drove sim tuning: fire burn rates (stage 4 ≈ 14 h so a fed fire lasts the 15 h night), initial fire fuel 25, wolves no longer treat a sleeping-at-camp player as easy meat. Open: rescue-rate band (bots currently die d2–d6; target naive ~60% die, optimal ~5% — needs human-calibrated policy realism before chasing numbers).
 
 ## Commands
 - Dev: `npm run dev` → http://localhost:5173
