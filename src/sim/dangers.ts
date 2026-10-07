@@ -5,7 +5,7 @@
  * is a nameable chain, not random.
  */
 import { makeRng } from './rng';
-import { streamX } from './terrain';
+import { CRASH, streamX } from './terrain';
 
 // ---------------------------------------------------------------------------
 // Snares (snowshoe hare runs)
@@ -125,8 +125,8 @@ export function spawnWolves(seed: number): Wolf[] {
     const a = rng() * Math.PI * 2;
     wolves.push({
       id: i + 1,
-      x: Math.cos(a) * 90,
-      z: -140 + Math.sin(a) * 90,
+      x: CRASH.x + Math.cos(a) * 90,
+      z: CRASH.z + Math.sin(a) * 90,
       state: 'prowling',
       acquireT: 0,
       coolT: 0,

@@ -23,6 +23,21 @@ export function createInput(canvas: HTMLCanvasElement): InputState {
   window.addEventListener('keyup', (e) => held.delete(e.code));
   window.addEventListener('blur', () => held.clear());
 
+  // mouse buttons (right button drives the context wheel; press events are
+  // consumed once per frame like keys)
+  const btnDown = new Set<number>();
+  const btnPressed = new Set<number>();
+  window.addEventListener('contextmenu', (e) => e.preventDefault());
+  window.addEventListener('mousedown', (e) => {
+    // only while locked: the click that ACQUIRES the lock must not act
+    if (state.locked && !btnDown.has(e.button)) btnPressed.add(e.button);
+    btnDown.add(e.button);
+  });
+  window.addEventListener('mouseup', (e) => btnDown.delete(e.button));
+  window.addEventListener('blur', () => btnDown.clear());
+  (state as unknown as { _btnDown: Set<number> })._btnDown = btnDown;
+  (state as unknown as { _btnPressed: Set<number> })._btnPressed = btnPressed;
+
   canvas.addEventListener('click', () => {
     if (!state.locked) canvas.requestPointerLock();
   });
@@ -58,6 +73,21 @@ export function consumeKey(code: string): boolean {
     return true;
   }
   return false;
+}
+
+/** True once per physical mouse-button press (0 LMB, 2 RMB; consumes it). */
+export function consumeMouseButton(s: InputState, button: number): boolean {
+  const set = (s as unknown as { _btnPressed: Set<number> })._btnPressed;
+  if (set.has(button)) {
+    set.delete(button);
+    return true;
+  }
+  return false;
+}
+
+/** True while the mouse button is physically held. */
+export function isMouseButtonHeld(s: InputState, button: number): boolean {
+  return (s as unknown as { _btnDown: Set<number> })._btnDown.has(button);
 }
 
 /** Fill s.intent from held keys + current camera yaw (call once per frame). */

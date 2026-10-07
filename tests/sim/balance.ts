@@ -8,7 +8,7 @@
  * Output: per-policy rescue/death rates, death-cause + death-night histograms.
  */
 import { CONFIG } from '../../src/sim/config';
-import { zoneAt } from '../../src/sim/terrain';
+import { CRASH, zoneAt } from '../../src/sim/terrain';
 import {
   beginWork, boilWater, buildShelter, checkSnares, cook, createWorld, drink,
   eat, feedFire, fireFlare, fish, lightFire, setSnareAction, signalSmoke,
@@ -165,20 +165,24 @@ class BaseBot implements Bot {
   /** Scout a camp: near water (scarce), in forest (wind), with fuel within
    * reach — what a competent player does after looting the wreck. */
   protected scoutCamp(w: WorldState): void {
-    let best = { x: this.campX, z: this.campZ, score: -1 };
-    for (const it of w.interactables) {
-      if (it.kind !== 'water' || it.uses <= 0) continue;
-      for (const [ox, oz] of [[15, 0], [-15, 0], [0, 15], [0, -15], [11, 11], [-11, 11], [11, -11], [-11, -11]] as const) {
-        const x = it.x + ox;
-        const z = it.z + oz;
-        const zone = w.interactables.length ? zoneAt(x, z) : 'tundra';
-        let score = zone === 'forest' ? 2 : zone === 'bog' ? 0.5 : 0;
-        for (const k of ['deadfall', 'bark', 'boughs', 'berries'] as const) {
-          if (w.interactables.some((o) => o.kind === k && o.uses > 0 && dist(o.x, o.z, x, z) < 30)) score += 1;
-        }
-        // prefer closer to the wreck (loot drop, search area)
-        score -= dist(x, z, 0, -140) / 1000;
-        if (score > best.score) best = { x, z, score };
+    // Camp near the wreck (search area + loot drop) but on forested ground:
+    // the starter grove beside the crash site is the designed first camp.
+    const scoreAt = (x: number, z: number): number => {
+      const zone = zoneAt(x, z);
+      let s = zone === 'forest' ? 2 : zone === 'bog' ? 0.5 : 0;
+      for (const k of ['deadfall', 'bark', 'boughs', 'berries'] as const) {
+        if (w.interactables.some((o) => o.kind === k && o.uses > 0 && dist(o.x, o.z, x, z) < 30)) s += 1;
+      }
+      if (w.fishHoles.some((h) => h.usesLeft > 0 && dist(h.x, h.z, x, z) < 30)) s += 1;
+      if (w.interactables.some((o) => o.kind === 'water' && o.uses > 0 && dist(o.x, o.z, x, z) < 30)) s += 1;
+      s -= dist(x, z, CRASH.x, CRASH.z) / 25; // strong: camp IS the crash area
+      return s;
+    };
+    let best = { x: CRASH.x, z: CRASH.z + 20, score: scoreAt(CRASH.x, CRASH.z + 20) };
+    for (let x = CRASH.x - 45; x <= CRASH.x + 45; x += 5) {
+      for (let z = CRASH.z - 10; z <= CRASH.z + 55; z += 5) {
+        const s = scoreAt(x, z);
+        if (s > best.score) best = { x, z, score: s };
       }
     }
     this.campX = Math.round(best.x);
@@ -386,7 +390,7 @@ class NaiveBot extends BaseBot {
   override tick(w: WorldState): void {
     if (!this.looted) {
       this.phase = 'to-wreck';
-      if (!this.mover.move(w, 0, -140, this.rng)) return;
+      if (!this.mover.move(w, CRASH.x, CRASH.z, this.rng)) return;
       // check completion BEFORE starting another task (else snow-loops forever)
       if (!w.task && invHas(w.inventory, 'knife', 1)) {
         this.looted = true;
@@ -438,7 +442,7 @@ class AverageBot extends BaseBot {
   override tick(w: WorldState): void {
     if (!this.looted) {
       this.phase = 'to-wreck';
-      if (!this.mover.move(w, 0, -140, this.rng)) return;
+      if (!this.mover.move(w, CRASH.x, CRASH.z, this.rng)) return;
       if (!w.task && invHas(w.inventory, 'knife', 1)) {
         this.looted = true;
         this.scoutCamp(w);
@@ -521,7 +525,7 @@ class OptimalBot extends AverageBot {
       this.phase = 'signal-move';
       this.campX = 0;
       this.campZ = -137;
-      this.fireBuilt = w.fires.some((f) => f.lit && dist(f.x, f.z, 0, -140) < 6);
+      this.fireBuilt = w.fires.some((f) => f.lit && dist(f.x, f.z, CRASH.x, CRASH.z) < 6);
       if (!this.mover.move(w, 0, -137, this.rng)) return;
       if (!this.fireBuilt) {
         if (invHas(w.inventory, 'tinderBundle', 1)) {

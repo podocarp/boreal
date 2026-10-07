@@ -4,7 +4,7 @@
  * stream/ridge, rocks on ridge & shore, none on lake ice or in the stream.
  */
 import { valueNoise2 } from './noise';
-import { heightAt, lakeT, streamX, zoneAt } from './terrain';
+import { CRASH, heightAt, lakeT, streamX, zoneAt } from './terrain';
 
 export interface Prop {
   kind: 'spruce' | 'birch' | 'rock';
@@ -44,6 +44,22 @@ export function scatter(seed: number): Prop[] {
           : 0.5 + valueNoise2(x, z, seed + 17) * 1.4;
     const rot = valueNoise2(x + 40, z - 40, seed + 23) * Math.PI * 2;
     props.push({ kind, x, z, scale, rot });
+  }
+  // Guaranteed starter grove: a tight spruce stand 15-45 m from the crash site
+  // so the opening minutes have wood/shelter within a short walk (playtest:
+  // "the nearest treeline is a mile away"). Placed south of camp on land.
+  for (let i = 0; i < 90; i++) {
+    const a = valueNoise2(i * 1.7, 9.1, seed + 31) * Math.PI * 2;
+    const rad = 15 + valueNoise2(i * 2.3, 4.4, seed + 37) * 30;
+    const x = CRASH.x + 10 + Math.cos(a) * rad;
+    const z = CRASH.z + 28 + Math.sin(a) * rad * 0.7;
+    if (lakeT(x, z) < 1.12) continue; // keep off the ice (same rule as scatter)
+    if (Math.abs(x - streamX(z)) < 8.5) continue;
+    if (heightAt(x, z) <= 0.2) continue;
+    if (Math.hypot(x - CRASH.x, z - CRASH.z) < 8) continue; // keep the wreck clear
+    const scale = 0.8 + valueNoise2(x, z, seed + 41) * 1.0;
+    const rot = valueNoise2(x + 40, z - 40, seed + 43) * Math.PI * 2;
+    props.push({ kind: valueNoise2(x, z, seed + 47) < 0.85 ? 'spruce' : 'birch', x, z, scale, rot });
   }
   // sanity: nothing embedded below terrain
   return props.filter((p) => heightAt(p.x, p.z) > 0.2 || p.kind === 'rock');

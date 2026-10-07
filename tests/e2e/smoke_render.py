@@ -110,10 +110,18 @@ def main() -> int:
         assert needs["t1"] < needs["t0"] - 1.5, f"core temp did not drop overnight: {needs}"
         assert any('shivering' in m for m in needs["log"]), f"no shiver event: {needs['log']}"
 
-        # 6) interaction: scavenge the wreck via the debug API
+        # 6) interaction: contextual action layer + scavenge the wreck
+        acts = page.evaluate(
+            """() => { const b = window.__boreal; b.reset(1);
+                       b.world.player.x = -20; b.world.player.z = -62;
+                       return b.contextActions(); }"""
+        )
+        assert acts and acts[0]["id"] == "work" and acts[0]["enabled"], f"primary verb at wreck wrong: {acts}"
+        assert any(a["id"] == "sleep" for a in acts), f"sleep missing from wheel: {acts}"
+
         loot = page.evaluate(
             """() => { const b = window.__boreal; b.reset(1);
-                       b.world.player.x = 0; b.world.player.z = -140;
+                       b.world.player.x = -20; b.world.player.z = -62;
                        const ok = b.beginWork();
                        for (let i = 0; i < 20 * 60; i++) b.step(1); // plenty of time
                        return { ok, inv: b.world.inventory,
@@ -125,7 +133,7 @@ def main() -> int:
         # 7) fire loop: tinder → light (retry w/ time advance) → feed → boil → night
         fire = page.evaluate(
             """() => { const b = window.__boreal; b.reset(1);
-                       b.world.player.x = 0; b.world.player.z = -140;
+                       b.world.player.x = -20; b.world.player.z = -62;
                        const inv = b.world.inventory;
                        inv.bark = 8; inv.kindling = 8; inv.deadfall = 6; inv.snow = 1; inv.tinCup = 1;
                        let lit = 'no-bundle';
@@ -171,7 +179,7 @@ def main() -> int:
             """() => { const b = window.__boreal; b.reset(1);
                        const w = b.world; const inv = w.inventory;
                        inv.cordage = 2;
-                       w.player.x = -6; w.player.z = -80; // near stream bank
+                       w.player.x = -37; w.player.z = -80; // near stream bank
                        const set = b.setSnare();
                        // night of day 2: pack arrives
                        w.day = 2; w.hourOfDay = 22;
@@ -198,19 +206,19 @@ def main() -> int:
                          w.needs.energy = 100; w.needs.coreTemp = 37; w.needs.wetness = 0;
                          w.needs.health = 100; w.wolves = []; };
                        // loot the wreck at the crash site
-                       w.player.x = 0; w.player.z = -140;
+                       w.player.x = -20; w.player.z = -62;
                        b.beginWork();
                        for (let i = 0; i < 200; i++) { keep(); b.step(1); }
                        const looted = (w.inventory.knife || 0) > 0 && (w.inventory.tinCup || 0) > 0;
                        // signal fire on the open lake shore
                        w.inventory.boughs = (w.inventory.boughs || 0) + 6;
                        w.inventory.deadfall = (w.inventory.deadfall || 0) + 6;
-                       w.fires.push({ id: 5, x: 0, z: -140, fuel: 100, lit: true });
+                       w.fires.push({ id: 5, x: -20, z: -64, fuel: 100, lit: true });
                        const smoke = b.signalSmoke();
                        // fast-forward to the day-7 dawn pass
                        w.day = 7; w.hourOfDay = 8.5;
                        for (let i = 0; i < 40 * 120 && !w.rescued && !w.dead; i++) {
-                         w.player.x = 0; w.player.z = -140; keep(); b.step(1);
+                         w.player.x = -20; w.player.z = -62; keep(); b.step(1);
                        }
                        return { looted, smoke, rescued: !!w.rescued,
                                 day: w.rescued ? w.rescued.day : -1, dead: w.dead }; }"""
@@ -261,12 +269,13 @@ def main() -> int:
             page.wait_for_timeout(250)
             return page.evaluate(PIXEL_SCAN_JS)
 
-        # pose A: on the lake south of the wreck, looking north (-z) at it
-        # (camera forward = (-sin yaw, -cos yaw); yaw 0 → -z; dYaw = π from start yaw π)
-        a = pixels_after_pose(0, -110, "Math.PI", -0.25)
-        # pose B: forest edge east of the lake, looking east (+x) into trees
-        # (yaw -π/2 → forward (+1, 0); dYaw = π - (-π/2) = 3π/2)
-        b = pixels_after_pose(170, -100, "(3 * Math.PI / 2)", -0.1)
+        # pose A: on the bank just south of the wreck, looking north (-z) at it
+        # (yaw 0 → forward -z; spawn yaw π → dYaw π; slight down-pitch onto the
+        #  fuselage; verified via projection: wreck lands mid-frame)
+        a = pixels_after_pose(-20, -58, "Math.PI", 0.15)
+        # pose B: at the starter grove's south edge, looking north (-z) into the
+        # canopy so spruce silhouettes read against the sky (dYaw π from spawn)
+        b = pixels_after_pose(-40, -6, "Math.PI", -0.12)
 
         browser.close()
 
@@ -278,7 +287,7 @@ def main() -> int:
     if errors:
         print("PAGE ERRORS:", errors)
         return 1
-    assert a["bottomCoolFrac"] > 0.7, f"bottom not cool ground: {a['bottomCoolFrac']:.2f}"
+    assert b["bottomCoolFrac"] > 0.7, f"grove floor not cool ground: {b['bottomCoolFrac']:.2f}"
     assert a["orangePixels"] > 100, f"crash site not visible: {a['orangePixels']} px"
     assert b["sprucePixels"] > 500, f"spruce silhouettes missing: {b['sprucePixels']} px"
     assert a["distinct"] > 8, f"flat framebuffer: {a['distinct']} colors"

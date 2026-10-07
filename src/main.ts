@@ -12,9 +12,11 @@ import { INTERACT_LABEL } from './sim/interact';
 import { heightAt } from './sim/terrain';
 import { buildScene } from './render/scene';
 import { createCamState, orbit, updateCam, CAM, type CamState } from './render/camera';
-import { createInput, readIntent, consumeKey, isHeld } from './input/input';
+import { createInput, readIntent, consumeKey, isHeld, consumeMouseButton, isMouseButtonHeld } from './input/input';
 import { updateSky } from './render/daynight';
 import { updateHud, hideEndScreen } from './ui/hud';
+import { contextActions, primaryAction, type ActionCtx } from './sim/actions';
+import { openMenu, closeMenu, menuIsOpen, menuSteer } from './ui/menu';
 
 let world: WorldState = createWorld(1);
 let cam: CamState = createCamState();
@@ -234,6 +236,11 @@ function frame(now: number) {
 
   // --- sim (fixed timestep) ---
   readIntent(input, cam.yaw);
+  if (menuIsOpen()) {
+    input.intent.fwd = 0;
+    input.intent.strafe = 0;
+    input.intent.run = false;
+  }
   if (world.needs.sleeping) {
     // asleep: no movement, no work
     input.intent.fwd = 0;
@@ -249,40 +256,38 @@ function frame(now: number) {
     acc -= CONFIG.SIM_DT;
   }
 
-  // --- one-shot keys: E work · Tab craft · F light · R feed · Q boil · 1 drink · 2 eat ---
-  if (consumeKey('KeyE')) beginWork(world);
-  if (consumeKey('Tab')) {
-    const r = RECIPES.find((x) => canCraft(world.inventory, x));
-    if (r && craft(world.inventory, r)) {
-      world.log.push({ t: world.t, day: world.day, msg: `Crafted: ${r.label}` });
-    }
-  }
-  if (consumeKey('KeyF')) lightFire(world, computeDebuffs(world.needs).dexterity);
-  if (consumeKey('KeyR')) feedFire(world);
-  if (consumeKey('KeyQ')) boilWater(world);
-  if (consumeKey('Digit1')) drink(world);
-  if (consumeKey('Digit2')) eat(world);
-  if (consumeKey('KeyG')) buildShelter(world);
-  if (consumeKey('KeyZ')) toggleSleep(world);
-  if (consumeKey('KeyC')) setSnareAction(world);
-  if (consumeKey('KeyX')) checkSnares(world);
-  if (consumeKey('KeyV')) fish(world);
-  if (consumeKey('KeyB')) cook(world);
-  if (consumeKey('KeyT')) treatWound(world);
-  if (consumeKey('KeyH')) fireFlare(world);
-  if (consumeKey('KeyJ')) signalSmoke(world);
+  // --- contextual actions (playtest: one verb + one wheel, no key sprawl) ---
+  // LMB / E  = primary verb on the nearest thing (gather/loot/wake)
+  // hold RMB = radial menu of everything possible HERE, release to do it
+  const actx: ActionCtx = { dexterity: computeDebuffs(world.needs).dexterity };
   if (consumeKey('Enter') && (world.dead || world.rescued)) {
     hideEndScreen();
     world = createWorld(world.seed);
     cam = createCamState();
+  } else if (!world.dead && !world.rescued) {
+    if (menuIsOpen() && !input.locked) closeMenu(); // Esc dropped pointer lock
+    if (consumeMouseButton(input, 2) && !menuIsOpen()) {
+      openMenu(contextActions(world, actx));
+    }
+    if (menuIsOpen()) {
+      if (consumeKey('Escape')) closeMenu();
+      else if (!isMouseButtonHeld(input, 2)) {
+        const a = closeMenu();
+        if (a) a.run(world);
+      }
+    } else if (input.locked && (consumeKey('KeyE') || consumeMouseButton(input, 0))) {
+      const a = primaryAction(world, actx);
+      if (a?.enabled) a.run(world);
+    }
   }
   world.shouting = isHeld(input, 'Space'); // hoo-hoo! repels wolves
   syncFireMeshes();
   syncShelterMeshes();
   syncWolfMeshes();
 
-  // --- camera (per-frame, smooth) ---
-  orbit(cam, input.dYaw, input.dPitch, 0.0022);
+  // --- camera (per-frame, smooth); mouse steers the wheel while it's open ---
+  if (menuIsOpen()) menuSteer(input.dYaw, input.dPitch);
+  else orbit(cam, input.dYaw, input.dPitch, 0.0022);
   input.dYaw = 0;
   input.dPitch = 0;
   applyCamera(dtReal);
@@ -302,7 +307,11 @@ function frame(now: number) {
     input.locked,
     feelsLike(world),
     computeDebuffs(world.needs),
-    world.task ? 'Working…' : tgt ? `[E] ${INTERACT_LABEL[tgt.kind]}` : '',
+    world.task
+      ? 'Working…'
+      : tgt
+        ? `[LMB/E] ${INTERACT_LABEL[tgt.kind]} · hold [RMB] for everything else`
+        : 'hold [RMB] for actions',
   );
 
   renderer.render(scene, camera);
@@ -356,6 +365,18 @@ requestAnimationFrame(frame);
     const r = RECIPES.find((x) => canCraft(world.inventory, x));
     if (r && craft(world.inventory, r)) return r.id;
     return null;
+  },
+  /** contextual action layer (E2E): labels + enabled flags right now */
+  contextActions() {
+    const ctx: ActionCtx = { dexterity: computeDebuffs(world.needs).dexterity };
+    return contextActions(world, ctx).map((a) => ({ id: a.id, enabled: a.enabled }));
+  },
+  /** run the primary verb (what LMB/E would do) */
+  runPrimary() {
+    const ctx: ActionCtx = { dexterity: computeDebuffs(world.needs).dexterity };
+    const a = primaryAction(world, ctx);
+    if (a?.enabled) a.run(world);
+    return a?.id ?? null;
   },
   renderOnce() { renderer.render(scene, camera); },
   setPaused(v: boolean) { paused = v; },

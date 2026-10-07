@@ -11,9 +11,14 @@ export type Zone = 'lake' | 'stream' | 'bog' | 'ridge' | 'forest';
 
 export const LAKE = { cx: 0, cz: -150, rx: 150, rz: 90 };
 
-/** Stream meanders x = f(z) from the ridge (north-west) down to the lake. */
+/** Crash site: on the lake ice at the south shore, stream mouth ~15 m west,
+ *  guaranteed spruce grove 14-45 m behind camp (see scatter). */
+export const CRASH = { x: -20, z: -62 };
+
+/** Stream meanders x = f(z) from the ridge (north-west) down to the lake,
+ *  reaching the south shore right beside the crash site (CRASH). */
 export function streamX(z: number): number {
-  return -60 + 0.25 * (z + 150) + 18 * Math.sin(z * 0.02 + 1.3);
+  return -35 + 0.15 * (z + 150) + 14 * Math.sin(z * 0.02 + 0.4);
 }
 
 export function lakeT(x: number, z: number): number {

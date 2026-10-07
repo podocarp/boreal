@@ -11,15 +11,20 @@ CHROMIUM = os.environ.get("CHROMIUM", "chromium")
 ARGS = ["--no-sandbox", "--disable-gpu", "--use-gl=swiftshader", "--enable-unsafe-swiftshader"]
 
 POSES = {
-    # day: lake ice south of the wreck, late-afternoon light, looking north
+    # day: on the bank beside the wreck, late-afternoon light, looking north
+    # across the frozen lake (wreck + grove in frame)
     "day": """
-        b.world.player.x = 0; b.world.player.z = -108; b.step(1);
-        b.world.hourOfDay = 15.4; b.orbitCam(Math.PI, -0.12);""",
+        b.world.player.x = -20; b.world.player.z = -56; b.step(1);
+        b.world.hourOfDay = 15.4; b.orbitCam(Math.PI, 0.05);""",
+    # day2: from the lake looking at the camp — grove + wreck shoreline
+    "camp": """
+        b.world.player.x = -25; b.world.player.z = -85; b.step(1);
+        b.world.hourOfDay = 14.0; b.orbitCam(0, -0.18);""",
     # night: camped with a big fire, warm glow against the dark
     "night": """
-        b.world.player.x = 0; b.world.player.z = -140; b.step(1);
+        b.world.player.x = -20; b.world.player.z = -62; b.step(1);
         b.world.hourOfDay = 21.5;
-        b.world.fires.push({ id: 1, x: 2.5, z: -142, fuel: 90, lit: true });
+        b.world.fires.push({ id: 1, x: -18, z: -60, fuel: 90, lit: true });
         b.step(2);
         b.orbitCam(Math.PI * 1.18, -0.16);""",
 }

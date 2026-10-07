@@ -4,13 +4,20 @@ import { CAM, createCamState, orbit, updateCam } from '../../src/render/camera';
 const clear = () => Infinity;
 
 describe('third-person camera', () => {
-  it('sits behind the player relative to facing when sprinting', () => {
+  it('is stationary: yaw never drifts without mouse input (no auto-swing)', () => {
     const c = createCamState();
-    const inp = { px: 0, py: 0, pz: 0, pyaw: 0, moving: true, sprinting: true };
-    let eye = updateCam(c, inp, 0.1, clear).eye;
-    // run many frames: camera should swing to behind (player faces +z, so eye z < 0)
-    for (let i = 0; i < 60; i++) eye = updateCam(c, inp, 0.1, clear).eye;
-    expect(eye[2]).toBeLessThan(-0.5);
+    const yaw0 = c.yaw;
+    // walk, sprint, idle — none of these may rotate the camera (user-reported
+    // "keeps rotating about" bug; standard third-person = mouse-only orbit)
+    const inp = { px: 0, py: 0, pz: 0, pyaw: 2.5, moving: true, sprinting: true };
+    for (let i = 0; i < 120; i++) updateCam(c, inp, 0.1, clear);
+    inp.moving = false;
+    inp.sprinting = false;
+    for (let i = 0; i < 120; i++) updateCam(c, inp, 0.1, clear);
+    expect(c.yaw).toBeCloseTo(yaw0, 6);
+    // ...and mouse input still orbits
+    orbit(c, 100, 0, 0.01);
+    expect(c.yaw).not.toBeCloseTo(yaw0, 6);
   });
 
   it('pitch clamps within limits', () => {

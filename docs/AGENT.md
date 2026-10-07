@@ -7,6 +7,8 @@ Read-me-first for any agent (fresh subagent or resumed-after-compaction). This f
 
 **Status: MVP COMPLETE + Sprint 8 (balance) in progress.** Tags `sprint-0`…`sprint-7` + `v0.1-mvp` pushed to https://github.com/podocarp/boreal (branch `main`). 80 unit tests green, tsc clean, headless E2E golden path (loot→fire→signal→day-7 rescue) green.
 
+**S8b (playtest feedback, 2026-10-07)**: interaction = contextual (LMB/E primary verb + hold-RMB radial wheel; `src/sim/actions.ts` pure + tested, `src/ui/menu.ts` DOM wheel, pointer-lock-safe via mouse deltas). Camera = mouse-only orbit (no auto-swing — user complaint). Crash site = `CRASH` const in `terrain.ts` at (-20,-62): south shore, grove 17 m, stream 12 m, fish hole 12 m. E2E pixel pose A stands ON the bank (7 m high) at (-20,-58) dYaw π pitch 0.15; pose B grove edge (-40,-6) dYaw π. `tests/e2e/run_smoke.sh` = one-command smoke; `run_shot_inner.sh <out.png> day|camp|night` = screenshots.
+
 Sprint 8 (user-approved, deliberately small): **craving curve** (`NEEDS.CRAVING_K`, food restores more when hungrier — no new UI) + **Monte-Carlo balance harness** (`npm run balance [seeds]` → `tests/sim/balance.ts`; naive/average/optimal bots play full headless games; prints rescue %, death causes, death days). Harness already drove sim tuning: fire burn rates (stage 4 ≈ 14 h so a fed fire lasts the 15 h night), initial fire fuel 25, wolves no longer treat a sleeping-at-camp player as easy meat. Open: rescue-rate band (bots currently die d2–d6; target naive ~60% die, optimal ~5% — needs human-calibrated policy realism before chasing numbers).
 
 ## Commands

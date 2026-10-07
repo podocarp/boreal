@@ -5,7 +5,7 @@
  */
 import { CONFIG } from './config';
 import { collidersFrom, scatter, type Collider } from './scatter';
-import type { Zone } from './terrain';
+import { CRASH, type Zone } from './terrain';
 import { airTempAt, createEnv, createNeeds, tickNeeds, windchill, type Difficulty, type EnvState, type NeedsState } from './needs';
 import { buildInteractables, findTarget, startTask, WRECK_LOOT, YIELDS, type Interactable, type WorkTask } from './interact';
 import { invAdd, invCanAdd, invRemove, invHas, type Inventory } from './items';
@@ -95,7 +95,7 @@ export function createWorld(seed = 1, difficulty: Difficulty = 'ranger'): WorldS
     t: 0,
     hourOfDay: 8,
     day: 1,
-    player: { x: 0, y: 0, z: -140, yaw: Math.PI, speed: 0, moving: false, zone: 'lake' },
+    player: { x: CRASH.x, y: 0, z: CRASH.z, yaw: 0, speed: 0, moving: false, zone: 'lake' },
     colliders: collidersFrom(props),
     needs: createNeeds(),
     env: createEnv(),

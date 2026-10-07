@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { CONFIG } from '../sim/config';
-import { LAKE, heightAt, streamX } from '../sim/terrain';
+import { CRASH, LAKE, heightAt, streamX } from '../sim/terrain';
 import { scatter, type Prop } from '../sim/scatter';
 import { PALETTE as P } from './palette';
 
@@ -251,7 +251,7 @@ export function buildScene(container: HTMLElement): SceneBundle {
   scene.add(spruce, birch, rock);
 
   const crash = crashSite();
-  crash.position.set(0, heightAt(0, -140), -140);
+  crash.position.set(CRASH.x, heightAt(CRASH.x, CRASH.z), CRASH.z);
   scene.add(crash);
 
   const player = playerMesh();

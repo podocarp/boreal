@@ -28,8 +28,6 @@ export const CAM = {
   PITCH_MAX: 1.05, // look down ~60°
   COLLIDE_EASE_IN: 14, // fast pull-in on obstruction
   COLLIDE_EASE_OUT: 3, // slow ease back out (anti-strobe)
-  SPRINT_SWING: 0.5, // camera swings behind while sprinting
-  IDLE_RECENTER_RATE: 0.6, // Dinkum-ish drift behind player when idle
 };
 
 export function createCamState(): CamState {
@@ -58,22 +56,20 @@ export function updateCam(
   dt: number,
   rayDist: (from: [number, number, number], to: [number, number, number]) => number,
 ): CamPose {
-  // sprint: swing camera behind player facing; idle: drift behind too
-  let yaw = c.yaw;
-  const behind = inp.pyaw + Math.PI;
-  if (inp.sprinting) yaw = lerpAngle(yaw, behind, Math.min(1, CAM.SPRINT_SWING * dt * 2));
-  else if (!inp.moving) yaw = lerpAngle(yaw, behind, Math.min(1, CAM.IDLE_RECENTER_RATE * dt));
-  c.yaw = yaw;
+  // Standard third-person: yaw changes ONLY from mouse input (no auto-swing,
+  // no idle recenter — users reported the drift as nauseating; orbit() above
+  // is the sole yaw source). `inp.pyaw/moving/sprinting` stay in the API for
+  // future modes but do not move the camera.
 
   // pivot→eye direction = -cameraForward (camera sits behind the pivot)
   const cp = Math.cos(c.pitch);
-  const dirX = Math.sin(yaw) * cp;
+  const dirX = Math.sin(c.yaw) * cp;
   const dirY = Math.sin(c.pitch);
-  const dirZ = Math.cos(yaw) * cp;
+  const dirZ = Math.cos(c.yaw) * cp;
 
   // shoulder pivot (right-biased relative to camera yaw)
-  const rightX = Math.cos(yaw);
-  const rightZ = -Math.sin(yaw);
+  const rightX = Math.cos(c.yaw);
+  const rightZ = -Math.sin(c.yaw);
   const pivot: [number, number, number] = [
     inp.px + rightX * CAM.SHOULDER_OFFSET_M,
     inp.py + CAM.PIVOT_HEIGHT_M,
@@ -103,9 +99,3 @@ export function updateCam(
   };
 }
 
-function lerpAngle(a: number, b: number, t: number): number {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
-}

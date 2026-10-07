@@ -5,7 +5,7 @@
  */
 import { CONFIG } from './config';
 import { valueNoise2 } from './noise';
-import { streamX } from './terrain';
+import { CRASH, streamX } from './terrain';
 import type { Prop } from './scatter';
 import type { ItemId } from './items';
 
@@ -100,7 +100,7 @@ export function buildInteractables(seed: number, props: Prop[]): Interactable[] 
     list.push({ id: id++, kind: 'water', x: streamX(z), z, uses: 99 });
   }
   // crash site
-  list.push({ id: id++, kind: 'wreck', x: 0, z: -140, uses: 1 });
+  list.push({ id: id++, kind: 'wreck', x: CRASH.x, z: CRASH.z, uses: 1 });
   return list;
 }
 

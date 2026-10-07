@@ -5,6 +5,7 @@ import { buildInteractables } from '../../src/sim/interact';
 import { craft, canCraft, RECIPES } from '../../src/sim/craft';
 import { invAdd, invWeight, CARRY_LIMIT_KG } from '../../src/sim/items';
 import { CONFIG } from '../../src/sim/config';
+import { CRASH } from '../../src/sim/terrain';
 
 const H = CONFIG.TIME.REAL_SECONDS_PER_GAME_HOUR;
 
@@ -19,8 +20,8 @@ describe('interactables', () => {
 
   it('scavenging the wreck yields the grab bag once', () => {
     const w = createWorld(1);
-    w.player.x = 0;
-    w.player.z = -140;
+    w.player.x = CRASH.x;
+    w.player.z = CRASH.z;
     w.player.moving = false;
     expect(currentTarget(w)?.kind).toBe('wreck');
     expect(beginWork(w)).toBe(true);
@@ -35,8 +36,8 @@ describe('interactables', () => {
 
   it('moving cancels an in-progress task', () => {
     const w = createWorld(1);
-    w.player.x = 0;
-    w.player.z = -140;
+    w.player.x = CRASH.x;
+    w.player.z = CRASH.z;
     beginWork(w);
     expect(w.task).not.toBeNull();
     w.player.moving = true;
@@ -47,8 +48,8 @@ describe('interactables', () => {
   it('low dexterity slows work', () => {
     const mk = () => {
       const w = createWorld(1);
-      w.player.x = 0;
-      w.player.z = -140;
+      w.player.x = CRASH.x;
+      w.player.z = CRASH.z;
       beginWork(w);
       return w;
     };
