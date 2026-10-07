@@ -41,7 +41,8 @@ Consequences not chores: slow need decay, auto-sip from carried stock, no click-
 
 ## Post-MVP backlog (not started)
 Trapper's cache discovery · widowmaker scripted hazard · tea/morale · save/load · balance Monte-Carlo (naive vs smart play) · art polish · license choice (currently TBD).
-Needs-research deltas not yet built (see RESEARCH-needs-full.md §3): hidden fat-reserve pool buffering hunger · auto-EAT toggle (we only auto-sip) · Raft-style craving curve (food more effective when hungrier) · 3-match economy as a hard mode.
+Needs-research deltas not yet built (see RESEARCH-needs-full.md §3): hidden fat-reserve pool buffering hunger · auto-EAT toggle (note: PZ vanilla only ships auto-DRINK; auto-eat is a community mod — our auto-sip is the vanilla-equivalent) · Raft-style craving curve (food more effective when hungrier) · 3-match economy as a hard mode.
+User design note (2026-10-07): PZ separates **fullness** (stomach; drives mood/happiness) from **calories** (drives weight/strength) — salad fills you without nourishing you. If we ever split our single hunger bar, the Arctic-native version is the documented "protein starvation" (full on lean hare, starving for fat) — pairs naturally with the fat-reserve pool; do NOT import PZ's full macro/moodle soup.
 
 ## Workflow expectations (from user)
 Sprint = dev → eval → test loop ending in: unit green, E2E green, docs updated (PLAN.md log + this file if state changed), commit + tag, push. Delegate exploration/simple parallelizable work to subagents to protect context; point them at this file. Keep replies to the user short and factual.
