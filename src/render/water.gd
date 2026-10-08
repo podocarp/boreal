@@ -10,6 +10,19 @@ const Z_MIN := -150.0        # lake shore
 const Z_MAX := 138.0         # terrain mesh edge (CRASH.z + 200)
 const STEP := 3.0
 const FROZEN_TIME := 4.0     # fixed shader time for deterministic shots
+const LAKE_T := 1.15         # Terrain's lakeMix ends at lakeT=1.15: inside that
+                             # radius the frozen heightAt flattens the channel
+                             # floor down to lake ice (y≈0), so the channel-floor
+                             # formula no longer describes the ground and the
+                             # ribbon would float as a sheet over the lake shelf.
+                             # The stream only draws OUTSIDE this region.
+const BANK_D := 6.0          # bank sample distance across the channel (m); the
+                             # frozen carve rises from ±5 m, so ±6 m is bank.
+const BANK_MARGIN := 0.10    # water surface (incl. ±0.09 shader waves) must
+                             # stay this far below the bank
+const TAPER := 0.10          # ramp width over this margin (lakeT units / meters)
+                             # so the ribbon tapers to a point where the channel
+                             # ends instead of showing a vertical cut edge.
 
 const SHADER := """
 shader_type spatial;
@@ -51,27 +64,54 @@ static func water_y(z: float) -> float:
 	return maxf(-1.5, Terrain._heightAtLakeApproach(z)) + 0.12
 
 
+## Bank height across the channel at row z (frozen heightAt sampled at ±BANK_D).
+static func bank_y(z: float) -> float:
+	var sx := Terrain.streamX(z)
+	return minf(Terrain.heightAt(sx - BANK_D, z), Terrain.heightAt(sx + BANK_D, z))
+
+
+## 0..1 width ramp: where the frozen channel actually exists. The
+## channel-floor formula only describes the ground OUTSIDE the lake-flatten
+## region (Terrain.heightAt mixes everything inside lakeT<1.15 down to lake
+## ice, so the ribbon would float there as a sheet over the shelf — this is
+## what put the camp "in water") and only while the bank stays above the
+## surface by BANK_MARGIN. Ramps to 0 at both limits so the ribbon tapers to
+## a point where the channel ends instead of showing a vertical cut edge.
+static func channel_taper(z: float) -> float:
+	var y := water_y(z)
+	var t_lake := clampf((Terrain.lakeT(Terrain.streamX(z), z) - LAKE_T) / TAPER, 0.0, 1.0)
+	var t_bank := clampf((bank_y(z) - BANK_MARGIN - y) / TAPER, 0.0, 1.0)
+	return minf(t_lake, t_bank)
+
+
 static func build_mesh() -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var norms := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var idx := PackedInt32Array()
+	var prev_base := -1
 	var z := Z_MIN
-	var row := 0
 	while z <= Z_MAX + 0.001:
 		var sx := Terrain.streamX(z)
 		var y := water_y(z)
-		verts.append(Vector3(sx - HALF_W, y, z))
-		verts.append(Vector3(sx + HALF_W, y, z))
-		norms.append(Vector3.UP)
-		norms.append(Vector3.UP)
-		uvs.append(Vector2(0.0, z * 0.05))
-		uvs.append(Vector2(1.0, z * 0.05))
-		if row > 0:
-			var a := (row - 1) * 2
-			idx.append_array(PackedInt32Array([a, a + 1, a + 2, a + 1, a + 3, a + 2]))
+		var t := channel_taper(z)
+		if t <= 0.0:
+			if prev_base >= 0:
+				# channel ended: close the strip at a point on the centerline
+				var base := verts.size()
+				_append_pair(verts, norms, uvs, sx, y, z, 0.0)
+				var a := prev_base
+				idx.append_array(PackedInt32Array([a, a + 1, base, a + 1, base + 1, base]))
+				prev_base = -1
+			z += STEP
+			continue
+		var base := verts.size()
+		_append_pair(verts, norms, uvs, sx, y, z, HALF_W * t)
+		if prev_base >= 0:
+			var a := prev_base
+			idx.append_array(PackedInt32Array([a, a + 1, base, a + 1, base + 1, base]))
+		prev_base = base
 		z += STEP
-		row += 1
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -81,6 +121,16 @@ static func build_mesh() -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+static func _append_pair(verts: PackedVector3Array, norms: PackedVector3Array,
+		uvs: PackedVector2Array, sx: float, y: float, z: float, half: float) -> void:
+	verts.append(Vector3(sx - half, y, z))
+	verts.append(Vector3(sx + half, y, z))
+	norms.append(Vector3.UP)
+	norms.append(Vector3.UP)
+	uvs.append(Vector2(0.0, z * 0.05))
+	uvs.append(Vector2(1.0, z * 0.05))
 
 
 static func build_material(frozen: bool) -> ShaderMaterial:

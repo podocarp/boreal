@@ -61,9 +61,12 @@ func _ready() -> void:
 				Vector3(Terrain.CRASH.x + 8.0, 0.0, Terrain.CRASH.z + 34.0), 2.0)
 		"stream":
 			hud.visible = false
+			# look UPSTREAM (+z): the ribbon now terminates where the frozen
+			# channel ends (lake-flatten region), so looking downstream would
+			# show mostly clipped lake shelf.
 			var z := -30.0
 			_add_checkpoint_cam(Vector3(Terrain.streamX(z), 0.0, z),
-				Vector3(Terrain.streamX(z - 40.0), 0.0, z - 40.0), 1.7)
+				Vector3(Terrain.streamX(z + 40.0), 0.0, z + 40.0), 1.7)
 		"hud":
 			_add_checkpoint_cam(Vector3(_camp.x - 10.0, 0.0, _camp.z - 9.0), _camp, 2.2)
 		_:
