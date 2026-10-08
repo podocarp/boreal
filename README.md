@@ -1,10 +1,11 @@
-# boreal (Godot port) — phase 2a
+# boreal (Godot port) — phase 2b
 
 Standalone Godot 4.7.1 port of the BOREAL survival sim (`boreal-src/` TypeScript).
 **Phase 1 = pure sim core + analytic terrain, golden-value tested (frozen).
 Phase 2a = explorable 3D world: real CC0 assets, terrain mesh + MultiMesh
-scatter from the frozen sim, third-person player, visual checkpoints. No
-gameplay loop yet (phase 2b: HUD, wolves, rescue ending).**
+scatter, third-person player. Phase 2b = playable loop (GameLoop drives the
+sim on a fixed 0.25 s accumulator), survival HUD, stream water shader,
+flat-ground camp, day/night lighting. Wolves/fishing/snares still stubbed.**
 
 ## Layout
 - `src/sim/` — GDScript port of the pure TS sim as `RefCounted` classes
@@ -32,24 +33,45 @@ gameplay loop yet (phase 2b: HUD, wolves, rescue ending).**
 - `vendor/sdk/` — vendored copies of `sdk/prefabs/player_mover.gd` +
   `camera_third_person.gd` (see `vendor/sdk/VENDOR.md`). Player spawns at the
   sim's `Terrain.CRASH` site; WASD + mouse-look (input map in project.godot).
+- `src/game/game.gd` — `GameLoop`: owns the `WorldSim`, fixed-step accumulator
+  (0.25 s REAL ticks; dt stays real seconds — the #1 historical bug class),
+  syncs the 3D rig into `world.player`, harvests sim-log lines into `toasts`.
+  Actions: E interact (chop/snap/peel/scoop/snow/scavenge via the frozen
+  `Interact` radius), F feed fire, R melt, C cook, Q drink, T eat.
+- `src/game/camp_site.gd` — grid-samples the frozen `heightAt` near CRASH and
+  picks the flattest fire-ring spot (test asserts footprint max−min < 0.15 m);
+  the sim's CRASH position itself is untouched.
+- `src/game/player_rig.gd` + `src/render/camp_visuals.gd` — code-built player
+  capsule rig and camp (trodden pad + rock ring + shadowless warm omni +
+  emissive flame; the old shadowed 20-energy omni painted pink streaks).
+- `src/render/water.gd` — stream ribbon following `Terrain.streamX`, riding the
+  frozen channel-floor formula; wave/fresnel/foam shader. `SHOT_FROZEN=1` pins
+  `u_time` (deterministic shots; live play uses sim seconds, never wall-clock).
+- `src/render/day_night.gd` — sun angle, sky gradient, fog, ambient as a pure
+  function of the sim's `hourOfDay`.
+- `src/render/hud.gd` — needs bars, core/feels temp, day+clock, inventory,
+  context prompt, toasts (tick-timed expiry, no wall-clock).
 
 ## Run
 ```bash
 # from the godot-factory repo root
 bash scripts/run_tests.sh games/boreal            # semantic tests, no pixels
 bash scripts/render_shot.sh games/boreal /tmp/boreal.png   # weston+lavapipe shot
-CHECKPOINT=camp bash scripts/render_shot.sh games/boreal /tmp/camp.png  # curated viewpoints: camp | treeline | stream
+# curated viewpoints: camp | treeline | stream | hud (default: follow player).
+# SHOT_FROZEN=1 pauses the sim + pins water time for deterministic shots.
+CHECKPOINT=camp SHOT_FROZEN=1 bash scripts/render_shot.sh games/boreal /tmp/camp.png
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (5/5)
+## Test status (7/7)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
 - `test_world.gd` — 2-game-day determinism (state hash ×2, seed divergence), feed-fire/melt/cook/scavenge/sleep happy paths
 - `test_render.gd` — terrain mesh vertex/index counts + a vertex sits exactly on `heightAt`; MultiMesh instance total == sim scatter count in the render radius; every model path loads and yields a Mesh
+- `test_game_loop.gd` — GameLoop driver: chop→deadfall in inventory, container-gated scoop→waterRaw, feed-fire→fuel up, melt+cook→waterClean/meatCooked, needs decay over one game-day with zero time drift (`t` must equal 24×30 REAL s), toast recording
+- `test_camp_water.gd` — camp spot flatness < 0.15 m over its footprint (and flatter than CRASH), within search radius, deterministic; water verts sit exactly on `streamX` ± HALF_W and on the frozen channel-floor formula, below the banks
 
-## Phase 2b (not yet ported)
-Gameplay loop wiring (WorldSim ↔ scene), HUD, wolves FSM, snares/fishing,
-injuries→sepsis, crafting UI, action wheel, day/night visuals, rescue E2E,
-plane-wreck + wolf assets (known gaps), audio.
+## Phase 2c (not yet ported)
+Wolves FSM, snares/fishing, injuries→sepsis, crafting UI, action wheel,
+rescue E2E, plane-wreck + wolf assets (known gaps), audio.

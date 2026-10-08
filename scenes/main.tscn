@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://scenes/main.gd" id="1_o5qli"]
 
-[node name="Main" type="Node3D" unique_id=1940248824]
+[node name="Main" type="Node3D" unique_id=866869192]
 script = ExtResource("1_o5qli")
