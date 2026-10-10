@@ -5,7 +5,10 @@ Standalone Godot 4.7.1 port of the BOREAL survival sim (`boreal-src/` TypeScript
 Phase 2a = explorable 3D world: real CC0 assets, terrain mesh + MultiMesh
 scatter, third-person player. Phase 2b = playable loop (GameLoop drives the
 sim on a fixed 0.25 s accumulator), survival HUD, stream water shader,
-flat-ground camp, day/night lighting. Wolves/fishing/snares still stubbed.**
+flat-ground camp, day/night lighting. Phase 2c (partial) = snares/fishing/
+injuries ported from dangers.ts; wolves deliberately CUT from the MVP
+(owner directive 2026-10-10: tension is solo + slow environmental death;
+snares are a food source, never a hazard).**
 
 ## Layout
 - `src/sim/` — GDScript port of the pure TS sim as `RefCounted` classes
@@ -14,6 +17,7 @@ flat-ground camp, day/night lighting. Wolves/fishing/snares still stubbed.**
   - `config.gd` `rng.gd` (mulberry32, bit-exact) `noise.gd` `terrain.gd`
     `needs.gd` `items.gd` `fire.gd` `scatter.gd` `interact.gd` `shelter.gd`
     `rescue.gd` `world.gd` (step ordering mirrors `world.ts`) `actions.gd`
+    `dangers.gd` (snares/fishing/injuries; wolf FSM deliberately unported)
     `build.gd` `player.gd`
 - `tests/` — headless SceneTree tests (`run_tests.sh` convention).
   `goldens.gd` holds reference values extracted from the real TS sim
@@ -83,7 +87,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (9/9)
+## Test status (10/10)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -92,10 +96,13 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_game_loop.gd` — GameLoop driver: chop→deadfall in inventory, container-gated scoop→waterRaw, feed-fire→fuel up, melt+cook→waterClean/meatCooked, needs decay over one game-day with zero time drift (`t` must equal 24×30 REAL s), toast recording
 - `test_camp_water.gd` — camp spot flatness < 0.15 m over its footprint (and flatter than CRASH), within search radius, deterministic; water verts sit exactly on `streamX` ± HALF_W and on the frozen channel-floor formula, below the banks
 - `test_gen_level.gd` — generated level: baked data loads (height_hash pinned), `TerrainHM.heightAt` exact at cell centers + bilinear midpoints, spawn passes the SpawnSelect flatness gate, biome scatter non-empty/deterministic/on-heightmap Y, water rects cover only water cells and quads ride `water_level`, `main.tscn` constructs under `LEVEL=generated` headless with the sim re-seated at the baked spawn
+- `test_dangers.gd` — snares/fishing/injuries (wolves cut): hareSignAt grid goldens, snare tick sequences from fixed rng seeds incl. snowMul delay, world-driven spring→pending→collect, fishRoll hour table + hole table + world fishing flow, injury→infection→sepsis timelines vs TS, sepsis death chain (cause `infection`, 15–30 h band), treatInjury/treatWound resets
 
 ## Phase 2c (not yet ported)
-Wolves FSM, snares/fishing, injuries→sepsis, crafting UI, action wheel,
-rescue E2E, plane-wreck + wolf assets (known gaps), audio.
+Crafting UI, action wheel, rescue E2E, plane-wreck assets (known gaps),
+audio. Wolves/wildlife: deliberately CUT from the MVP (owner directive
+2026-10-10 — solo + slow environmental death is the tension; no scripted
+encounters). The TS wolf FSM stays unported on purpose.
 
 ## Handover notes (generated level, 2026-10-08)
 - **White trees — fixed.** `ScatterRender.make_multimesh(..., material_overlay)`

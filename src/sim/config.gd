@@ -67,6 +67,29 @@ const CLIMATE := {
 	"WIND_NIGHT_MUL": 1.4,
 }
 
+# Food & dangers (dangers.ts S6; wolves deliberately cut from the MVP).
+const DANGERS := {
+	"HARE_SIGN_BAND_M": 25.0,       # hareSignAt: sign dies off ±25 m from stream
+	"SNARE_BASE_P": 0.06,           # catch prob per game hour at quality+0.3 = 1
+	"SNARE_FRESH_H": 24.0,          # bait freshness plateau (game hours)
+	"SNARE_FRESH_DECAY_H": 48.0,    # freshness decay past the plateau
+	"SNARE_FRESH_MIN": 0.25,        # freshness floor
+	"SNARE_SNOW_MUL": 0.5,          # deep-snow (active storm) catch multiplier
+	"SNARE_SET_MIN_DIST_M": 8.0,    # overlapping runs spook the hares
+	"SNARE_COLLECT_DIST_M": 3.0,    # collect game within reach of the snare
+	"FISH_HOLE_ZS": [-150, -120, -60, 20, 90],
+	"FISH_HOLE_USES": 4,
+	"FISH_REACH_M": 4.0,
+	"FISH_P_GOLDEN": 0.65,          # dawn/dusk bite
+	"FISH_P_DAY": 0.4,
+	"INFECT_P_PER_H": 0.05,         # untreated infection prob per game hour
+	"INFECTION_PER_H": 2.5,         # infection progression per game hour
+	"SEPSIS_INFECTION_GT": 60.0,    # sepsis kicks in above this
+	"SEPSIS_HP_PER_H": 6.0,         # health drain per game hour (out-heals regen 2/h)
+	"TREAT_SEVERITY_GT": 30.0,      # treatInjury targets infected or severity > 30
+	"TREAT_SEVERITY_FLOOR": 5.0,    # treated severity floor (halved otherwise)
+}
+
 
 static func difficulty_mul(d: String) -> float:
 	if d == "bushman":

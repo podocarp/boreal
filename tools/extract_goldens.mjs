@@ -3,6 +3,7 @@ import { makeRng } from './sim/rng.ts';
 import { valueNoise2, fbm2, hash2 } from './sim/noise.ts';
 import { heightAt, zoneAt, lakeT, streamX } from './sim/terrain.ts';
 import { windchill, airTempAt, heatBudget, createNeeds, createEnv, insulationOf } from './sim/needs.ts';
+import { hareSignAt, setSnare, tickSnares, buildFishHoles, fishRoll, addInjury, tickInjuries, treatInjury, sepsisDamagePerH } from './sim/dangers.ts';
 
 const out = {};
 
@@ -66,6 +67,77 @@ for (const h of [0,2,8,14,17,23]) out.airTempAt[h] = airTempAt(h, -12, 6);
     insulation_default: insulationOf(n, env),
     insulation_wet: (() => { const m = createNeeds(); m.wetness = 0.9; return insulationOf(m, env); })(),
   };
+}
+
+// --- dangers (S6; wolves deliberately cut from the MVP) ---
+
+// hareSignAt grid samples (stream-band sign strength × seeded noise)
+out.hareSignAt = {};
+for (const seed of [1, 7]) {
+  for (const [x, z] of [[-35,0],[-40,-6],[-20,-62],[0,-150],[10,90],[60,20],[-100,-100],[0,200],[-33,3],[-37,-3]]) {
+    out.hareSignAt[`${x},${z},${seed}`] = hareSignAt(x, z, seed);
+  }
+}
+
+// snare tick sequences from fixed seeds: 48 game-hours at 1/12 h steps.
+// Each entry: catch hour (null = never caught), final ageH, final set flag.
+out.snareTicks = {};
+for (const [tag, seed, snowMul] of [["s1m1",1,1],["s1m05",1,0.5],["s42m1",42,1],["s42m05",42,0.5],["s7m1",7,1]]) {
+  const snares = [];
+  setSnare(snares, 1, -35, 0, 1);          // fixed spot (stream meanders: sign here is 0)
+  const rng = makeRng(seed);
+  let caughtAtH = null;
+  for (let i = 0; i < 48 * 120; i++) {
+    const res = tickSnares(snares, 1 / 120, snowMul, rng);
+    if (res.caught > 0 && caughtAtH === null) caughtAtH = (i + 1) / 120;
+    if (!snares[0].set) break;
+  }
+  out.snareTicks[tag] = { caughtAtH, ageH: snares[0].ageH, set: snares[0].set };
+}
+
+// fishRoll hour table: fresh rng per hour, seed 3; hour 0..23 step 0.5
+out.fishRoll = [];
+for (let h = 0; h < 24; h += 0.5) {
+  out.fishRoll.push({ hour: h, hit: fishRoll(h, makeRng(3)) });
+}
+
+// fish hole table (positions ride streamX; uses fixed at 4)
+out.fishHoles = buildFishHoles(1).map((h) => ({ id: h.id, x: h.x, z: h.z, usesLeft: h.usesLeft }));
+
+// injury → infection → sepsis timeline: severity 40 untreated, 1/60-h steps,
+// fresh rng(seed) per scenario. Records infection hour, hour infection crosses
+// 60 (sepsis threshold), sepsis damage rate, and treatInjury reset semantics.
+out.injuryTimeline = {};
+for (const seed of [1, 5]) {
+  const list = [];
+  addInjury(list, 'test wound', 40);
+  const rng = makeRng(seed);
+  let infectedAtH = null, septicAtH = null;
+  for (let i = 0; i < 200 * 60; i++) {
+    const ev = tickInjuries(list, 1 / 60, rng);
+    if (ev.length && infectedAtH === null) infectedAtH = (i + 1) / 60;
+    if (list[0].infected && list[0].infection > 60 && septicAtH === null) septicAtH = (i + 1) / 60;
+    if (septicAtH !== null) break;
+  }
+  out.injuryTimeline[`s${seed}`] = {
+    infectedAtH, septicAtH,
+    infection: list[0].infection,
+    sepsisPerH: sepsisDamagePerH(list),
+  };
+}
+
+// treatInjury semantics: infected+80 severity treated → clean, halved;
+// then a 20-severity clean wound is NOT treatable (TS find predicate).
+{
+  const list = [];
+  addInjury(list, 'a', 80);
+  list[0].infected = true;
+  list[0].infection = 90;
+  const ok = treatInjury(list);
+  out.treatInjury = { ok, severity: list[0].severity, infected: list[0].infected, infection: list[0].infection };
+  const list2 = [];
+  addInjury(list2, 'b', 20);
+  out.treatInjury.cleanLow = { ok: treatInjury(list2), severity: list2[0].severity };
 }
 
 console.log(JSON.stringify(out, null, 1));

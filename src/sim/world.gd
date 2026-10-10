@@ -1,6 +1,7 @@
-## BOREAL — pure simulation core — port of world.ts (phase 1: no wolves/snares/
-## injuries; those hooks return "not implemented"). dt is REAL seconds everywhere;
-## convert to game hours only via REAL_SECONDS_PER_GAME_HOUR.
+## BOREAL — pure simulation core — port of world.ts. Wolves deliberately cut
+## from the MVP (see dangers.gd); snares/fishing/injuries ported (phase 2c).
+## dt is REAL seconds everywhere; convert to game hours only via
+## REAL_SECONDS_PER_GAME_HOUR.
 class_name WorldSim
 
 var seed: int
@@ -22,6 +23,10 @@ var nextFireId := 1
 var shelters: Array = []
 var nextShelterId := 1
 var sleep := {}
+var snares: Array = []       # DangerSim snare dicts (see dangers.gd)
+var nextSnareId := 1
+var fishHoles: Array = []    # DangerSim fish-hole dicts
+var injuries: Array = []     # DangerSim injury dicts
 var shouting := false
 var wolvesOut := false
 var rngN := 0
@@ -45,6 +50,10 @@ func _init(p_seed := 1, p_difficulty := "ranger") -> void:
 		"msg": "You crawl from the wreck. The radio is dead. Search pattern passes near day 7."}]
 	interactables = Interact.build_interactables(seed, props)
 	sleep = ShelterSim.create_sleep()
+	snares = []
+	nextSnareId = 1
+	fishHoles = DangerSim.build_fish_holes(seed)
+	injuries = []
 	rescue = RescueSim.create_rescue()
 
 
@@ -117,7 +126,30 @@ func step(dt := Config.SIM_DT, sprinting := false) -> void:
 			sleep.active = false
 			push_log(wake)
 
-	# [phase 2 stubs: snares, wolves, injuries — no rolls while empty]
+	# --- S6: food & dangers ---
+	# snares catch over time (deep-snow mulch from recent storm halves rate).
+	# Wolves deliberately cut from the MVP (see dangers.gd header) — no wolf
+	# spawn/tick block here; the TS roll stream is unaffected while snares and
+	# injuries are empty, so existing world hashes stay stable.
+	var any_snare_set := false
+	for s in snares:
+		if s.set:
+			any_snare_set = true
+			break
+	if any_snare_set:
+		var snow_mul: float = Config.DANGERS.SNARE_SNOW_MUL if storm != null else 1.0
+		var tick := DangerSim.tick_snares(snares, dt_game_h(dt), snow_mul, roll)
+		for id in tick.ids:
+			for s in snares:
+				if s.id == id:
+					s.pending = (s.pending if s.pending != null else 0) + 1  # must be collected at the snare
+					break
+		if tick.caught > 0:
+			push_log("A snare sprang somewhere down the stream bank.")
+
+	# injuries → infection
+	for e in DangerSim.tick_injuries(injuries, dt_game_h(dt), roll):
+		push_log(e)
 
 	var res := Needs.tick(needs, env, dt, player.moving, sprinting, difficulty)
 	for e in res.events:
@@ -126,7 +158,13 @@ func step(dt := Config.SIM_DT, sprinting := false) -> void:
 		dead = res.died
 		push_log("You died of %s (%s)." % [res.died.cause, res.died.detail])
 
-	# [phase 2 stub: sepsis damage AFTER regen]
+	# sepsis drains health AFTER regen (untreated infection out-heals recovery)
+	var sep := DangerSim.sepsis_damage_per_h(injuries)
+	if sep > 0.0 and dead == null:
+		needs.health = maxf(0.0, needs.health - sep * dt_game_h(dt))
+		if needs.health <= 0.0:
+			dead = {"cause": "infection", "detail": "Blood poisoning from an untreated wound."}
+			push_log("Fever takes you. The wound won.")
 
 	# rescue search passes + collapse deadline
 	var pass_res := RescueSim.check_pass(rescue, day, hourOfDay,

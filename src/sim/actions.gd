@@ -1,5 +1,6 @@
 ## Player actions — port of world.ts action functions (phase 1 happy paths).
-## Wolves/snares/fishing/treat are phase-2 stubs. Shelter build lives in build.gd.
+## Wolves deliberately cut from the MVP; snares/fishing/treat ported (S6).
+## Shelter build lives in build.gd.
 class_name Actions
 
 
@@ -231,19 +232,76 @@ static func toggle_sleep(w: WorldSim) -> bool:
 	w.sleep.hours = 0.0
 	var insul := ShelterSim.shelter_warmth_at(w.shelters, w.player.x, w.player.z)
 	w.push_log("You crawl into the shelter and sleep." if insul > 0.5 else "You try to sleep out in the open. Risky.")
-	return true# --- phase 2 stubs ---
-
-static func set_snare(_w: WorldSim) -> String:
-	return "not implemented"
+	return true
 
 
-static func check_snares(_w: WorldSim) -> int:
-	return 0
+# --- Food & dangers actions (S6; port of world.ts setSnareAction/checkSnares/
+# fish/treatWound). Wolves deliberately cut from the MVP. ---
+
+## Set a snare at the player (costs 1 cordage). Quality from hare sign.
+static func set_snare(w: WorldSim) -> String:
+	if w.dead != null:
+		return "materials"
+	if not Items.inv_has(w.inventory, "cordage", 1):
+		return "materials"
+	for s in w.snares:
+		if s.set and sqrt(pow(s.x - w.player.x, 2) + pow(s.z - w.player.z, 2)) < Config.DANGERS.SNARE_SET_MIN_DIST_M:
+			return "too-close"  # overlapping runs spook the hares
+	Items.inv_remove(w.inventory, "cordage", 1)
+	var s := DangerSim.set_snare(w.snares, w.nextSnareId, w.player.x, w.player.z, w.seed)
+	w.nextSnareId += 1
+	w.push_log("Snare set on fresh sign — good spot." if s.quality > 0.5 else "Snare set. The sign here is thin.")
+	return "set"
 
 
-static func fish(_w: WorldSim) -> String:
-	return "not implemented"
+## Collect game from any snare within reach.
+static func check_snares(w: WorldSim) -> int:
+	var got := 0
+	for s in w.snares:
+		if s.pending != null and s.pending > 0 \
+				and sqrt(pow(s.x - w.player.x, 2) + pow(s.z - w.player.z, 2)) < Config.DANGERS.SNARE_COLLECT_DIST_M:
+			if Items.inv_can_add(w.inventory, "meat", s.pending):
+				Items.inv_add(w.inventory, "meat", s.pending)
+				got += s.pending
+				s.pending = 0
+			else:
+				w.push_log("No room for the game.")
+	if got > 0:
+		w.push_log("You collect %d× small game from the snare." % got)
+	return got
 
 
-static func treat_wound(_w: WorldSim) -> bool:
-	return false
+## Fish at an ice-edge hole (needs cordage; dawn/dusk bite better).
+static func fish(w: WorldSim) -> String:
+	if w.dead != null:
+		return "no-hole"
+	var hole: Variant = null
+	for h in w.fishHoles:
+		if h.usesLeft > 0 and sqrt(pow(h.x - w.player.x, 2) + pow(h.z - w.player.z, 2)) < Config.DANGERS.FISH_REACH_M:
+			hole = h
+			break
+	if hole == null:
+		return "no-hole"
+	if not Items.inv_has(w.inventory, "cordage", 1):
+		return "materials"
+	if DangerSim.fish_roll(w.hourOfDay, w.roll):
+		hole.usesLeft -= 1
+		Items.inv_add(w.inventory, "meat", 1)
+		w.push_log("A pickerel comes up the hole. Meat.")
+		return "caught"
+	w.push_log("The line goes slack. Nothing.")
+	return "missed"
+
+
+## Treat the worst wound with duct tape + boiled-water rinse (needs fire).
+static func treat_wound(w: WorldSim) -> bool:
+	if not Items.inv_has(w.inventory, "ductTape", 1):
+		return false
+	var f: Variant = w.nearest_fire(3.0)
+	if f == null or not f.lit:
+		return false
+	if not DangerSim.treat_injury(w.injuries):
+		return false
+	Items.inv_remove(w.inventory, "ductTape", 1)
+	w.push_log("You rinse the wound with boiled water and close it with tape. It hurts. It helps.")
+	return true

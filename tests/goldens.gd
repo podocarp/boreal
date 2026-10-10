@@ -152,3 +152,111 @@ const HEAT_BUDGET = {
 	"insulation_default": 4606641986844732948,
 	"insulation_wet": 4601958243232267632,
 }
+
+# --- dangers (S6): snares / fishing / injuries (wolves cut from MVP) ---
+# hareSignAt grid samples: key "x,z,seed"
+const HARE_SIGN_AT = {
+	"-35,0,1": 0,
+	"-40,-6,1": 0,
+	"-20,-62,1": 4601437897991569662,
+	"0,-150,1": 0,
+	"10,90,1": 4603973680088519402,
+	"60,20,1": 0,
+	"-100,-100,1": 0,
+	"0,200,1": 4602079645962436996,
+	"-33,3,1": 0,
+	"-37,-3,1": 0,
+	"-35,0,7": 0,
+	"-40,-6,7": 0,
+	"-20,-62,7": 4601062852483304861,
+	"0,-150,7": 0,
+	"10,90,7": 4606223968696141702,
+	"60,20,7": 0,
+	"-100,-100,7": 0,
+	"0,200,7": 4601776240743406117,
+	"-33,3,7": 0,
+	"-37,-3,7": 0,
+}
+
+# snare tick sequences: fresh makeRng(seed), 1/120-h steps, on-stream snare.
+# caughtAtH = game-hour of first catch (null = never in 48 h); ageH/set final.
+const SNARE_TICKS = {
+	"s1m1": {"caughtAtH": null, "ageH": 4631952216750554843, "set": true},
+	"s1m05": {"caughtAtH": null, "ageH": 4631952216750554843, "set": true},
+	"s42m1": {"caughtAtH": 4617109102978679876, "ageH": 4617109102978679909, "set": false},
+	"s42m05": {"caughtAtH": 4617146632975574630, "ageH": 4617146632975574665, "set": false},
+	"s7m1": {"caughtAtH": null, "ageH": 4631952216750554843, "set": true},
+}
+
+# fishRoll hour table (fresh rng seed 3 per hour, hour 0..23 step 0.5)
+const FISH_ROLL = [
+	{"hour": 0.0, "hit": false},
+	{"hour": 0.5, "hit": false},
+	{"hour": 1.0, "hit": false},
+	{"hour": 1.5, "hit": false},
+	{"hour": 2.0, "hit": false},
+	{"hour": 2.5, "hit": false},
+	{"hour": 3.0, "hit": false},
+	{"hour": 3.5, "hit": false},
+	{"hour": 4.0, "hit": false},
+	{"hour": 4.5, "hit": false},
+	{"hour": 5.0, "hit": false},
+	{"hour": 5.5, "hit": false},
+	{"hour": 6.0, "hit": false},
+	{"hour": 6.5, "hit": false},
+	{"hour": 7.0, "hit": false},
+	{"hour": 7.5, "hit": false},
+	{"hour": 8.0, "hit": false},
+	{"hour": 8.5, "hit": false},
+	{"hour": 9.0, "hit": false},
+	{"hour": 9.5, "hit": false},
+	{"hour": 10.0, "hit": false},
+	{"hour": 10.5, "hit": false},
+	{"hour": 11.0, "hit": false},
+	{"hour": 11.5, "hit": false},
+	{"hour": 12.0, "hit": false},
+	{"hour": 12.5, "hit": false},
+	{"hour": 13.0, "hit": false},
+	{"hour": 13.5, "hit": false},
+	{"hour": 14.0, "hit": false},
+	{"hour": 14.5, "hit": false},
+	{"hour": 15.0, "hit": false},
+	{"hour": 15.5, "hit": false},
+	{"hour": 16.0, "hit": false},
+	{"hour": 16.5, "hit": false},
+	{"hour": 17.0, "hit": false},
+	{"hour": 17.5, "hit": false},
+	{"hour": 18.0, "hit": false},
+	{"hour": 18.5, "hit": false},
+	{"hour": 19.0, "hit": false},
+	{"hour": 19.5, "hit": false},
+	{"hour": 20.0, "hit": false},
+	{"hour": 20.5, "hit": false},
+	{"hour": 21.0, "hit": false},
+	{"hour": 21.5, "hit": false},
+	{"hour": 22.0, "hit": false},
+	{"hour": 22.5, "hit": false},
+	{"hour": 23.0, "hit": false},
+	{"hour": 23.5, "hit": false},
+]
+
+# buildFishHoles(1) table
+const FISH_HOLES = [
+	{"id": 1, "x": -4592233702296445631, "z": -4583890364477210624, "usesLeft": 4},
+	{"id": 2, "x": -4592091114846167185, "z": -4585227370616586240, "usesLeft": 4},
+	{"id": 3, "x": -4593800258127659143, "z": -4589730970243956736, "usesLeft": 4},
+	{"id": 4, "x": 4603065996087914288, "z": 4626322717216342016, "usesLeft": 4},
+	{"id": 5, "x": 4623124570188381223, "z": 4636033603912859648, "usesLeft": 4},
+]
+
+# injury timeline: severity-40 untreated wound, 1/60-h steps, fresh rng(seed)
+const INJURY_TIMELINE = {
+	"s1": {"infectedAtH": 4632759111683792350, "septicAtH": 4635171586796683264, "infection": 4633646930672833704, "sepsisPerH": 4618441417868443648},
+	"s5": {"infectedAtH": 4622166270060247996, "septicAtH": 4630071025656205585, "infection": 4633646930672833704, "sepsisPerH": 4618441417868443648},
+}
+
+# treatInjury semantics (infected sev-80 treated; clean sev-20 not treatable)
+const TREAT_INJURY = {
+	"ok": true, "severity": 4630826316843712512, "infected": false, "infection": 0,
+	"cleanLowOk": false, "cleanLowSeverity": 4626322717216342016,
+}
