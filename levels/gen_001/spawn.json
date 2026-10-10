@@ -1,0 +1,123 @@
+{
+	"candidates": [
+		{
+			"cell": [
+				63,
+				61
+			],
+			"index": 15679,
+			"scores": {
+				"animal_score": 1.0,
+				"animals": 57,
+				"mean_slope": 0.0768949068509615,
+				"slope_score": 0.923105093149038,
+				"tree_score": 1.0,
+				"trees": 10,
+				"water_score": 0.8
+			},
+			"total": 3.72310509314904,
+			"x": 126.0,
+			"y": 12.5096788406372,
+			"z": 122.0
+		},
+		{
+			"cell": [
+				64,
+				61
+			],
+			"index": 15680,
+			"scores": {
+				"animal_score": 1.0,
+				"animals": 58,
+				"mean_slope": 0.0721668491702108,
+				"slope_score": 0.927833150829789,
+				"tree_score": 1.0,
+				"trees": 10,
+				"water_score": 0.75
+			},
+			"total": 3.67783315082979,
+			"x": 128.0,
+			"y": 12.5827608108521,
+			"z": 122.0
+		},
+		{
+			"cell": [
+				65,
+				61
+			],
+			"index": 15681,
+			"scores": {
+				"animal_score": 1.0,
+				"animals": 59,
+				"mean_slope": 0.0692812225522374,
+				"slope_score": 0.930718777447763,
+				"tree_score": 1.0,
+				"trees": 10,
+				"water_score": 0.7
+			},
+			"total": 3.63071877744776,
+			"x": 130.0,
+			"y": 12.5496053695679,
+			"z": 122.0
+		},
+		{
+			"cell": [
+				66,
+				61
+			],
+			"index": 15682,
+			"scores": {
+				"animal_score": 1.0,
+				"animals": 60,
+				"mean_slope": 0.0684920993782359,
+				"slope_score": 0.931507900621764,
+				"tree_score": 1.0,
+				"trees": 10,
+				"water_score": 0.65
+			},
+			"total": 3.58150790062176,
+			"x": 132.0,
+			"y": 12.6401920318604,
+			"z": 122.0
+		},
+		{
+			"cell": [
+				67,
+				61
+			],
+			"index": 15683,
+			"scores": {
+				"animal_score": 1.0,
+				"animals": 61,
+				"mean_slope": 0.0692523301705806,
+				"slope_score": 0.930747669829419,
+				"tree_score": 1.0,
+				"trees": 10,
+				"water_score": 0.6
+			},
+			"total": 3.53074766982942,
+			"x": 134.0,
+			"y": 12.6740245819092,
+			"z": 122.0
+		}
+	],
+	"diagnostics": {
+		"constraint_failures": {
+			"border": 0,
+			"flat": 13761,
+			"water": 47374
+		},
+		"reason": "highest soft score among 369 viable cells; water 8.0m away; trees-in-ring=10; tie-break=lowest cell index",
+		"viable_cells": 369
+	},
+	"spawn": {
+		"cell": [
+			63,
+			61
+		],
+		"x": 126.0,
+		"y": 12.5096788406372,
+		"yaw": 0.0,
+		"z": 122.0
+	}
+}

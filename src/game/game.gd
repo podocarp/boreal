@@ -9,6 +9,9 @@ const TICK := Config.SIM_DT
 
 var world: WorldSim
 var player: CharacterBody3D      # optional 3D rig; when set, drives the sim position
+var terrain = Terrain            # duck-typed heightAt provider; LEVEL=generated
+                                 # swaps in a TerrainHM (baked data) — the
+                                 # frozen sim itself is never modified.
 var toasts: Array[String] = []   # every new sim-log line (HUD + tests)
 var tick_count := 0
 var paused := false              # SHOT_FROZEN: freeze the sim for deterministic shots
@@ -51,7 +54,7 @@ func _sync_player() -> void:
 	var p := player.global_position
 	world.player.x = p.x
 	world.player.z = p.z
-	world.player.y = Terrain.heightAt(p.x, p.z)
+	world.player.y = terrain.heightAt(p.x, p.z)
 	world.player.moving = Vector2(player.velocity.x, player.velocity.z).length() > 0.15
 	player.global_position.y = world.player.y + 0.85  # capsule center above feet
 	player.velocity.y = 0.0

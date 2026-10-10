@@ -51,6 +51,22 @@ flat-ground camp, day/night lighting. Wolves/fishing/snares still stubbed.**
   function of the sim's `hourOfDay`.
 - `src/render/hud.gd` — needs bars, core/feels temp, day+clock, inventory,
   context prompt, toasts (tick-timed expiry, no wall-clock).
+- `levels/gen_001/` — **second level: baked terrain-gen world** (seed 1337,
+  256², cell 2 m; heights/biomes/meta/spawn JSONs + mesh/collision `.tres`).
+  Reproduce with `bash tools/gen_level.sh` — the baked files are the
+  determinism boundary; never regenerate casually.
+- `src/level/terrain_hm.gd` — `TerrainHM`: heightmap adapter over the baked
+  grid (bilinear `heightAt` for render, nearest-cell `heightAtCell` for
+  gameplay, `zoneAt`/`speedMulAt` duck-typed against the frozen `Terrain`,
+  plus nearest-water BFS + `stream_info`). Adapter only — `src/sim/` untouched.
+- `src/level/gen_content.gd` — `GenContent`: deterministic biome-driven scatter
+  (forest→spruce/birch, rock→rocks, seeded jitter, camp clearing kept clear)
+  and the water-cell rect decomposition feeding the lake quads.
+- `src/level/gen_level.gd` — `GenLevel`: glue — loads baked mesh/collision,
+  builds scatter + flat lake quads (water shader reused), and injects
+  baked-world data into the frozen sim (spawn pose, colliders, interactables,
+  water scoop points). `GameLoop.terrain` is the provider seam (default =
+  frozen `Terrain`); `LEVEL=generated` swaps in `TerrainHM` from `main.gd`.
 
 ## Run
 ```bash
@@ -60,10 +76,14 @@ bash scripts/render_shot.sh games/boreal /tmp/boreal.png   # weston+lavapipe sho
 # curated viewpoints: camp | treeline | stream | hud (default: follow player).
 # SHOT_FROZEN=1 pauses the sim + pins water time for deterministic shots.
 CHECKPOINT=camp SHOT_FROZEN=1 bash scripts/render_shot.sh games/boreal /tmp/camp.png
+# second level (baked terrain-gen world): LEVEL=generated swaps terrain,
+# scatter, water and spawn; checkpoints camp | water | overview.
+LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
+  bash scripts/render_shot.sh games/boreal shots/gen_overview.png
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (7/7)
+## Test status (9/9)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -71,7 +91,31 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_render.gd` — terrain mesh vertex/index counts + a vertex sits exactly on `heightAt`; MultiMesh instance total == sim scatter count in the render radius; every model path loads and yields a Mesh
 - `test_game_loop.gd` — GameLoop driver: chop→deadfall in inventory, container-gated scoop→waterRaw, feed-fire→fuel up, melt+cook→waterClean/meatCooked, needs decay over one game-day with zero time drift (`t` must equal 24×30 REAL s), toast recording
 - `test_camp_water.gd` — camp spot flatness < 0.15 m over its footprint (and flatter than CRASH), within search radius, deterministic; water verts sit exactly on `streamX` ± HALF_W and on the frozen channel-floor formula, below the banks
+- `test_gen_level.gd` — generated level: baked data loads (height_hash pinned), `TerrainHM.heightAt` exact at cell centers + bilinear midpoints, spawn passes the SpawnSelect flatness gate, biome scatter non-empty/deterministic/on-heightmap Y, water rects cover only water cells and quads ride `water_level`, `main.tscn` constructs under `LEVEL=generated` headless with the sim re-seated at the baked spawn
 
 ## Phase 2c (not yet ported)
 Wolves FSM, snares/fishing, injuries→sepsis, crafting UI, action wheel,
 rescue E2E, plane-wreck + wolf assets (known gaps), audio.
+
+## Handover notes (generated level, 2026-10-08)
+- **White trees — fixed.** `ScatterRender.make_multimesh(..., material_overlay)`
+  replaces the surface material outright; the Quaternius glTF meshes carry no
+  vertex colors, so the unshaded snow-tint material rendered every prop as a
+  flat white silhouette. Generated-level scatter now uses the glTF materials
+  as-is (like the frozen level). Do NOT reintroduce a tint overlay on meshes
+  without vertex colors.
+- **Fog wash, not a bug.** Distant trees/terrain bleach toward the fog color
+  (`day_night.gd` fog ≈ horizon color, density 0.005–0.008). The blue-gray
+  near-ground tint is identical on the default level — pixel-sampled, matches
+  the frozen baseline. If a reviewer says "everything is white/blue", check
+  against `shots/boreal_camp.png` before chasing it.
+- **Known v0 gaps (generated level):** lake quads are axis-aligned rects
+  (stair-stepped shorelines by design); the frozen sim's zone/wind math still
+  reads analytic `Terrain` internally (sim-freeze constraint), so generated
+  zone effects are approximate; checkpoint cams are hardcoded offsets from
+  the baked spawn.
+- **Env trap:** `godot` + `weston` live in `~/.local/bin` (symlinks into
+  nixpkgs godot-4.7.2 / weston-15). A fresh shell without that on PATH makes
+  every test fail with exit 127 — that is NOT a code regression.
+- **Never regenerate `levels/gen_001/` casually** — baked files are the
+  determinism boundary (`height_hash ebabe3cf` pinned in tests).

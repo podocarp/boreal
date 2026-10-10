@@ -28,8 +28,10 @@ static func variant_index(i: int, kind: String) -> int:
 
 ## props -> {model_path: Array[Transform3D]}. Y from the sim's heightAt.
 ## Optional distance cull around `center`/`radius` (lavapipe budget).
+## `hm` (TerrainHM, nullable): duck-typed provider for generated levels —
+## when set, Y comes from the baked heightmap instead of the frozen Terrain.
 static func build_instances(props: Array, center := Vector2.INF,
-		radius := 1e9) -> Dictionary:
+		radius := 1e9, hm = null) -> Dictionary:
 	var out := {}
 	for path_list in MODELS.values():
 		for p in path_list:
@@ -41,7 +43,9 @@ static func build_instances(props: Array, center := Vector2.INF,
 					+ (p.z - center.y) * (p.z - center.y)) > radius * radius:
 				continue
 		var path: String = MODELS[p.kind][variant_index(i, p.kind)]
-		var pos := Vector3(p.x, Terrain.heightAt(p.x, p.z), p.z)
+		var h: float = hm.heightAtCell(p.x, p.z) if hm != null \
+			else Terrain.heightAt(p.x, p.z)
+		var pos := Vector3(p.x, h, p.z)
 		var basis := Basis(Vector3.UP, p.rot).scaled(Vector3.ONE * p.scale)
 		out[path].append(Transform3D(basis, pos))
 	return out

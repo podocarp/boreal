@@ -1,9 +1,11 @@
 ## Builds the vendored SDK third-person rig for boreal: capsule body at the
 ## sim's CRASH site, gravity 0 (GameLoop snaps y to heightAt every tick).
+## Generated level: pass `spawn` + `hm` (TerrainHM) to start at the baked
+## starter patch instead of the frozen CRASH site.
 class_name PlayerRig
 
 
-static func make() -> CharacterBody3D:
+static func make(spawn := Vector3.INF, hm = null) -> CharacterBody3D:
 	var PlayerMover: GDScript = load("res://vendor/sdk/player_mover.gd")
 	var ThirdPersonCamera: GDScript = load("res://vendor/sdk/camera_third_person.gd")
 	var p: CharacterBody3D = PlayerMover.new()
@@ -11,8 +13,11 @@ static func make() -> CharacterBody3D:
 	p.walk_speed = Config.PLAYER.WALK_SPEED_MPS
 	p.sprint_speed = Config.PLAYER.RUN_SPEED_MPS
 	p.gravity = 0.0
-	p.position = Vector3(Terrain.CRASH.x,
-		Terrain.heightAt(Terrain.CRASH.x, Terrain.CRASH.z) + 0.85, Terrain.CRASH.z)
+	var sx := Terrain.CRASH.x if spawn == Vector3.INF else spawn.x
+	var sz := Terrain.CRASH.z if spawn == Vector3.INF else spawn.z
+	var sy: float = Terrain.heightAt(sx, sz) if hm == null \
+		else hm.heightAt(sx, sz)
+	p.position = Vector3(sx, sy + 0.85, sz)
 	var col := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.4

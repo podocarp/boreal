@@ -1,0 +1,27 @@
+{
+	"biome_counts": {
+		"forest": 20953,
+		"grass": 26189,
+		"rock": 698,
+		"snow": 4583,
+		"water": 13113
+	},
+	"biome_fractions": {
+		"forest": 0.319717407226562,
+		"grass": 0.399612426757812,
+		"rock": 0.010650634765625,
+		"snow": 0.0699310302734375,
+		"water": 0.200088500976562
+	},
+	"cell_size_m": 2.0,
+	"height_hash": "ebabe3cf",
+	"hydraulic_particles": 12000,
+	"max_height": 43.0571975708008,
+	"mean_height": 19.3605830928791,
+	"min_height": 4.34507894515991,
+	"octaves": 5,
+	"seed": 1337,
+	"size": 256,
+	"thermal_passes": 3,
+	"water_level": 12.0
+}

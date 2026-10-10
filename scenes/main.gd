@@ -1,9 +1,10 @@
 extends Node3D
-## Boreal phase 2b scene: playable loop (GameLoop drives the frozen sim),
-## survival HUD, stream water shader, flat-ground camp, day/night lighting.
-## Reads $SHOT_OUT (render_shot.sh contract), $CHECKPOINT
-## ("camp" | "treeline" | "stream" | "hud" | default: follow player) and
-## $SHOT_FROZEN (=1: sim paused + water time pinned → deterministic shots).
+## BOREAL phase 2b scene: playable loop (GameLoop drives the frozen sim),
+## survival HUD, water shader, flat-ground camp, day/night lighting.
+## Env: $SHOT_OUT (render_shot.sh), $CHECKPOINT ("camp" | "treeline" |
+## "stream" | "hud" | "water" | "overview" | default: follow player),
+## $SHOT_FROZEN (=1: deterministic shots), $LEVEL ("generated" = baked
+## terrain-gen world from levels/gen_001; default = frozen level, identical).
 
 const SEED := 1
 const RENDER_RADIUS := 150.0  # lavapipe budget: cull scatter around the play core
@@ -17,23 +18,32 @@ var _fire_light: OmniLight3D
 var _flame: MeshInstance3D
 var _sky_mat: ProceduralSkyMaterial
 var _camp := Vector3.ZERO
+var _hm = null  # TerrainHM when LEVEL=generated, else null (frozen Terrain)
 
 
 func _ready() -> void:
 	_frozen = OS.get_environment("SHOT_FROZEN") == "1"
+	if OS.get_environment("LEVEL") == "generated":
+		_hm = GenLevel.load_hm()
 	var env := _add_environment()
 	var sun := _add_sun()
-	_camp = CampSite.find_center()
+	_camp = GenLevel.camp_center(_hm) if _hm != null else CampSite.find_center()
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
-	terrain.mesh = TerrainMesh.build(Vector2(Terrain.CRASH.x, Terrain.CRASH.z), 400.0, 128)
+	terrain.mesh = GenLevel.terrain_mesh(_hm) if _hm != null \
+		else TerrainMesh.build(Vector2(Terrain.CRASH.x, Terrain.CRASH.z), 400.0, 128)
 	add_child(terrain)
+	if _hm != null:
+		add_child(GenLevel.collision_body(_hm))
 	add_child(_make_scatter())
 	_add_water()
 	_add_camp()
 	_loop = GameLoop.new()
 	_loop.name = "GameLoop"
 	_loop.setup(SEED)
+	if _hm != null:  # swap the terrain provider + re-seat the sim at the bake
+		_loop.terrain = _hm
+		GenLevel.apply_to_sim(_loop, _hm, SEED)
 	add_child(_loop)
 	if OS.get_environment("SHOT_OUT") != "":
 		_loop.world.hourOfDay = SHOT_HOUR  # golden-hour light for all checkpoints
@@ -55,6 +65,15 @@ func _ready() -> void:
 		"camp":
 			hud.visible = false
 			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
+		"water", "overview":
+			# generated-level checkpoints (see GenLevel.checkpoint_cam)
+			if _hm == null:
+				add_child(_make_player())
+			else:
+				hud.visible = false
+				var cam: Array = GenLevel.checkpoint_cam(_hm, _camp,
+					OS.get_environment("CHECKPOINT"))
+				_add_checkpoint_cam(cam[0], cam[1], cam[2])
 		"treeline":
 			hud.visible = false
 			_add_checkpoint_cam(Vector3(Terrain.CRASH.x + 26.0, 0.0, Terrain.CRASH.z + 12.0),
@@ -104,8 +123,10 @@ func _add_sun() -> DirectionalLight3D:
 	return sun
 
 
-## All sim scatter props (seed SEED) as one MultiMeshInstance3D per glTF model.
+## Sim scatter props (seed SEED): one MultiMeshInstance3D per glTF model.
 func _make_scatter() -> Node3D:
+	if _hm != null:
+		return GenLevel.build_scatter(_hm, SEED, _camp, RENDER_RADIUS)
 	var root := Node3D.new()
 	root.name = "Scatter"
 	var center := Vector2(Terrain.CRASH.x, Terrain.CRASH.z + 10.0)
@@ -125,7 +146,8 @@ func _make_scatter() -> Node3D:
 
 
 func _add_water() -> void:
-	var water := WaterRender.build(_frozen)
+	var water := GenLevel.build_water(_hm, _frozen) if _hm != null \
+		else WaterRender.build(_frozen)
 	_water_mat = water.material_override
 	add_child(water)
 
@@ -137,21 +159,22 @@ func _add_camp() -> void:
 	_fire_light = camp.get_node("CampfireGlow")
 	_flame = camp.get_node("Flame")
 
-
-## Vendored SDK third-person rig; player spawns at the sim's crash site.
+## Vendored SDK rig; spawn = sim CRASH site (or baked starter patch).
 func _make_player() -> CharacterBody3D:
-	return PlayerRig.make()
+	return PlayerRig.make(_camp if _hm != null else Vector3.INF, _hm)
 
 
-## Static camera: eye meters above the ground at the camera spot,
-## looking at the target's ground + 1.5.
+## Static camera: eye meters above the ground at the camera spot, looking at
+## the target's ground + 1.5. Heights via the active terrain provider.
 func _add_checkpoint_cam(pos: Vector3, target: Vector3, eye: float) -> void:
-	pos.y = Terrain.heightAt(pos.x, pos.z) + eye
+	var h_at := func(x: float, z: float) -> float:
+		return _hm.heightAt(x, z) if _hm != null else Terrain.heightAt(x, z)
+	pos.y = h_at.call(pos.x, pos.z) + eye
 	var cam := Camera3D.new()
 	cam.name = "CheckpointCamera"
 	cam.position = pos
 	add_child(cam)  # look_at requires being inside the tree
-	cam.look_at(Vector3(target.x, Terrain.heightAt(target.x, target.z) + 1.5, target.z), Vector3.UP)
+	cam.look_at(Vector3(target.x, h_at.call(target.x, target.z) + 1.5, target.z), Vector3.UP)
 	cam.current = true
 
 
