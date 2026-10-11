@@ -132,6 +132,54 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
+## Play the web build
+The itch-ready artifact is `dist/boreal-web-<ver>.zip` (index.html at zip
+root — itch.io's requirement). Rebuild it with:
+```bash
+export PATH=$HOME/.local/bin:$PATH          # godot lives in ~/.local/bin
+bash tools/export.sh                        # -> dist/web/ + dist/boreal-web-0.1.0.zip
+VER=0.2.0 bash tools/export.sh              # override the version stamp
+```
+Requirements: the **Web export templates** for the engine version installed
+under `~/.local/share/godot/export_templates/<ver>.stable/` (this host:
+`4.7.2.stable`, matching `godot --version` = `4.7.2.stable.nixpkgs.*`;
+download `web_*.zip` from the matching GitHub release). The preset
+(`export_presets.cfg`) exports **without threads** (`variant/thread_support=
+false`): itch.io serves plain files without COOP/COEP headers, which
+threaded Godot web builds require — no-threads is the itch-compatible
+choice. Web uses `gl_compatibility` (`project.godot`
+`renderer/rendering_method.web`); desktop keeps `forward_plus`.
+
+Smoke-test the exported build headlessly (no GPU needed; nixpkgs Chromium +
+python playwright via nix-shell):
+```bash
+TMPDIR=/tmp nix-shell -p python3Packages.playwright --run \
+  'TMPDIR=/tmp python3 tools/smoke_web.py dist/web $(which chromium)'
+```
+It serves `dist/web/` on localhost and asserts: wasm/pck fetched 200, the
+splash overlay removed (= `startGame()` resolved), canvas 1280×720 with a
+live WebGL2 context, non-uniform framebuffer (real frames rendered), no
+page errors. Prints `SMOKE: PASS/FAIL`.
+
+**Level default:** the web build ships the **frozen analytic terrain** as
+the MVP default level — it matches the TS reference balance the harness was
+tuned against. The baked terrain-gen level stays opt-in: `LEVEL=generated`
+(env) swaps in `TerrainHM`; it is not selectable in the itch build.
+
+### itch.io page copy (draft)
+> **BOREAL** — a solo survival. You are the only survivor of a small-plane
+> crash in a frozen wilderness. The radio is dead; search passes fly the
+> area around day 7. There are no wolves, no monsters, no scripted
+> encounters — just cold, hunger, thirst, and sleep, and the slow arithmetic
+> of staying ahead of all four. Chop wood and keep the fire from sinking,
+> scoop snow and melt it, set snares on hare signs, fish the ice edge,
+> craft what you can carry. Eat and your body stores it; starve and it
+> burns mass — past 60 kg the cold finishes the job. Push too many days
+> without sleep and your hands stop working. Survive to the dawn of day 7
+> and flag down a pass. Deterministic survival sim (seeded, no RNG you
+> can't reason about), ported value-for-value from a tested TypeScript
+> reference. WASD + mouse, keyboard actions; runs in your browser.
+
 ## Test status (16/16)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
