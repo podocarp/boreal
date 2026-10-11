@@ -1,6 +1,8 @@
-# boreal (Godot port) — phase 2b
+# boreal (Godot port) — MVP complete
 
 Standalone Godot 4.7.1 port of the BOREAL survival sim (`boreal-src/` TypeScript).
+**MVP review 2026-10-11: `docs/MVP-REVIEW.md` — full gate evidence (suite, CI
+steps, fresh clone, web export + smoke, screenshots).**
 **Phase 1 = pure sim core + analytic terrain, golden-value tested (frozen).
 Phase 2a = explorable 3D world: real CC0 assets, terrain mesh + MultiMesh
 scatter, third-person player. Phase 2b = playable loop (GameLoop drives the
@@ -188,6 +190,7 @@ tuned against. The baked terrain-gen level stays opt-in: `LEVEL=generated`
 - `test_render.gd` — terrain mesh vertex/index counts + a vertex sits exactly on `heightAt`; MultiMesh instance total == sim scatter count in the render radius; every model path loads and yields a Mesh
 - `test_game_loop.gd` — GameLoop driver: chop→deadfall in inventory, container-gated scoop→waterRaw, feed-fire→fuel up, melt+cook→waterClean/meatCooked, needs decay over one game-day with zero time drift (`t` must equal 24×30 REAL s), toast recording
 - `test_camp_water.gd` — camp spot flatness < 0.15 m over its footprint (and flatter than CRASH), within search radius, deterministic; water verts sit exactly on `streamX` ± HALF_W and on the frozen channel-floor formula, below the banks
+- `test_water_channel.gd` — water ribbon channel constraints: every drawn vertex inside the frozen channel band, below the banks by BANK_MARGIN, outside the lake-flatten region; relocated camp clear of the ribbon; taper endpoints
 - `test_gen_level.gd` — generated level: baked data loads (height_hash pinned), `TerrainHM.heightAt` exact at cell centers + bilinear midpoints, spawn passes the SpawnSelect flatness gate, biome scatter non-empty/deterministic/on-heightmap Y, water rects cover only water cells and quads ride `water_level`, `main.tscn` constructs under `LEVEL=generated` headless with the sim re-seated at the baked spawn
 - `test_dangers.gd` — snares/fishing/injuries (wolves cut): hareSignAt grid goldens, snare tick sequences from fixed rng seeds incl. snowMul delay, world-driven spring→pending→collect, fishRoll hour table + hole table + world fishing flow, injury→infection→sepsis timelines vs TS, sepsis death chain (cause `infection`, 15–30 h band), treatInjury/treatWound resets
 - `test_craft.gd` — craft.ts port: recipe table + canCraft matrix + greedy first-craftable sequence + atomicity goldens vs TS, Actions.craft world flow (zero RNG rolls consumed), snare cross-world determinism across 5 game days, fish yields/usesLeft per seeded roll stream, treat_wound infection reset + TS re-treat predicate
