@@ -95,7 +95,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (12/12)
+## Test status (13/13)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
