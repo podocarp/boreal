@@ -46,6 +46,32 @@ L.push('const TREAT_INJURY = {');
 L.push(`\t"ok": ${g.treatInjury.ok}, "severity": ${fb(g.treatInjury.severity)}, "infected": ${g.treatInjury.infected}, "infection": ${fb(g.treatInjury.infection)},`);
 L.push(`\t"cleanLowOk": ${g.treatInjury.cleanLow.ok}, "cleanLowSeverity": ${fb(g.treatInjury.cleanLow.severity)},`);
 L.push('}');
+L.push('');
+L.push('# --- craft (craft.ts) ---');
+L.push('# RECIPES table in TS order: inputs/outputs, hours (game-hours), requires');
+L.push('const CRAFT_RECIPES = [');
+for (const r of g.craftRecipes) {
+  const io = (list) => list.map((e) => `{"item": "${e.item}", "n": ${e.n}}`).join(', ');
+  L.push(`\t{"id": "${r.id}", "label": "${r.label}", "in": [${io(r.in)}], "out": [${io(r.out)}], "hours": ${fb(r.hours)}, "requires": ${r.requires === null ? 'null' : `"${r.requires}"`}},`);
+}
+L.push(']');
+L.push('');
+L.push('# canCraft matrix: fixed inventories × RECIPES order');
+L.push('const CAN_CRAFT = {');
+for (const [k, arr] of Object.entries(g.canCraft))
+  L.push(`\t"${k}": [${arr.map((b) => String(b)).join(', ')}],`);
+L.push('}');
+L.push('');
+L.push('# greedy craft sequence (first-craftable loop): steps + final inventory');
+L.push('const CRAFT_SEQUENCE = {');
+L.push(`\t"steps": [${g.craftSequence.steps.map((s) => `"${s}"`).join(', ')}],`);
+L.push(`\t"inv": {${Object.entries(g.craftSequence.inv).map(([k, v]) => `"${k}": ${v}`).join(', ')}},`);
+L.push('}');
+L.push('');
+L.push('# atomicity: blocked craft (output stack full) must not consume inputs');
+L.push('const CRAFT_ATOMIC = {');
+L.push(`\t"ok": ${g.craftAtomic.ok}, "inv": {${Object.entries(g.craftAtomic.inv).map(([k, v]) => `"${k}": ${v}`).join(', ')}},`);
+L.push('}');
 
 appendFileSync('tests/goldens.gd', L.join('\n') + '\n');
 console.log('appended', L.length, 'lines');

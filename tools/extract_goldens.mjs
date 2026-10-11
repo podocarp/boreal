@@ -4,6 +4,7 @@ import { valueNoise2, fbm2, hash2 } from './sim/noise.ts';
 import { heightAt, zoneAt, lakeT, streamX } from './sim/terrain.ts';
 import { windchill, airTempAt, heatBudget, createNeeds, createEnv, insulationOf } from './sim/needs.ts';
 import { hareSignAt, setSnare, tickSnares, buildFishHoles, fishRoll, addInjury, tickInjuries, treatInjury, sepsisDamagePerH } from './sim/dangers.ts';
+import { RECIPES, canCraft, craft } from './sim/craft.ts';
 
 const out = {};
 
@@ -138,6 +139,53 @@ for (const seed of [1, 5]) {
   const list2 = [];
   addInjury(list2, 'b', 20);
   out.treatInjury.cleanLow = { ok: treatInjury(list2), severity: list2[0].severity };
+}
+
+// --- craft (craft.ts) ---
+
+// recipe table (declarative; hours are game-hours of work)
+out.craftRecipes = RECIPES.map((r) => ({
+  id: r.id, label: r.label, in: r.in, out: r.out, hours: r.hours, requires: r.requires ?? null,
+}));
+
+// canCraft matrix: fixed inventories × RECIPES order
+out.canCraft = {};
+{
+  const invs = {
+    empty: {},
+    bark4: { bark: 4 },
+    bark4knife: { bark: 4, knife: 1 },
+    tinder: { bark: 1, kindling: 2 },
+    kindlingSrc: { deadfall: 1, knife: 1 },
+    torch: { bark: 2, deadfall: 1 },
+    boughs6: { boughs: 6 },
+    // knife recipes blocked without the knife; cordage fits (stack 4, weight ok)
+    cordageBlocked: { bark: 4, barkContainer: 2 },
+  };
+  for (const [k, inv] of Object.entries(invs))
+    out.canCraft[k] = RECIPES.map((r) => canCraft(inv, r));
+}
+
+// greedy craft sequence (main.ts craftBest: first craftable recipe, repeat):
+// steps taken + final inventory. Deterministic, no RNG.
+{
+  const inv = { bark: 9, kindling: 6, deadfall: 3, boughs: 6, knife: 1 };
+  const steps = [];
+  for (let i = 0; i < 50; i++) {
+    const r = RECIPES.find((x) => canCraft(inv, x));
+    if (!r) break;
+    craft(inv, r);
+    steps.push(r.id);
+  }
+  out.craftSequence = { steps, inv };
+}
+
+// atomicity: barkContainer needs 4 bark AND output fit; stack-full barkContainer
+// (2/2) must block the craft WITHOUT consuming the bark.
+{
+  const inv = { bark: 4, barkContainer: 2, knife: 1 };
+  const ok = craft(inv, RECIPES.find((r) => r.id === 'barkContainer'));
+  out.craftAtomic = { ok, inv };
 }
 
 console.log(JSON.stringify(out, null, 1));

@@ -153,6 +153,7 @@ const HEAT_BUDGET = {
 	"insulation_wet": 4601958243232267632,
 }
 
+
 # --- dangers (S6): snares / fishing / injuries (wolves cut from MVP) ---
 # hareSignAt grid samples: key "x,z,seed"
 const HARE_SIGN_AT = {
@@ -259,4 +260,38 @@ const INJURY_TIMELINE = {
 const TREAT_INJURY = {
 	"ok": true, "severity": 4630826316843712512, "infected": false, "infection": 0,
 	"cleanLowOk": false, "cleanLowSeverity": 4626322717216342016,
+}
+
+# --- craft (craft.ts) ---
+# RECIPES table in TS order: inputs/outputs, hours (game-hours), requires
+const CRAFT_RECIPES = [
+	{"id": "kindling", "label": "Split kindling (×3)", "in": [{"item": "deadfall", "n": 1}], "out": [{"item": "kindling", "n": 3}], "hours": 4596373779694328218, "requires": "knife"},
+	{"id": "tinderBundle", "label": "Tinder bundle", "in": [{"item": "bark", "n": 1}, {"item": "kindling", "n": 2}], "out": [{"item": "tinderBundle", "n": 1}], "hours": 4594572339843380019, "requires": null},
+	{"id": "barkContainer", "label": "Bark container", "in": [{"item": "bark", "n": 4}], "out": [{"item": "barkContainer", "n": 1}], "hours": 4599075939470750515, "requires": "knife"},
+	{"id": "boughBundle", "label": "Bough bundle (bedding)", "in": [{"item": "boughs", "n": 6}], "out": [{"item": "boughBundle", "n": 1}], "hours": 4598175219545276416, "requires": null},
+	{"id": "cordage", "label": "Cordage (twisted bark)", "in": [{"item": "bark", "n": 4}], "out": [{"item": "cordage", "n": 1}], "hours": 4598175219545276416, "requires": null},
+	{"id": "torch", "label": "Torch", "in": [{"item": "bark", "n": 2}, {"item": "deadfall", "n": 1}], "out": [{"item": "torch", "n": 1}], "hours": 4594572339843380019, "requires": null},
+]
+
+# canCraft matrix: fixed inventories × RECIPES order
+const CAN_CRAFT = {
+	"empty": [false, false, false, false, false, false],
+	"bark4": [false, false, false, false, true, false],
+	"bark4knife": [false, false, true, false, true, false],
+	"tinder": [false, true, false, false, false, false],
+	"kindlingSrc": [true, false, false, false, false, false],
+	"torch": [false, false, false, false, false, true],
+	"boughs6": [false, false, false, true, false, false],
+	"cordageBlocked": [false, false, false, false, true, false],
+}
+
+# greedy craft sequence (first-craftable loop): steps + final inventory
+const CRAFT_SEQUENCE = {
+	"steps": ["kindling", "kindling", "tinderBundle", "tinderBundle", "kindling", "tinderBundle", "tinderBundle", "barkContainer", "boughBundle"],
+	"inv": {"bark": 1, "kindling": 7, "knife": 1, "tinderBundle": 4, "barkContainer": 1, "boughBundle": 1},
+}
+
+# atomicity: blocked craft (output stack full) must not consume inputs
+const CRAFT_ATOMIC = {
+	"ok": false, "inv": {"bark": 4, "barkContainer": 2, "knife": 1},
 }

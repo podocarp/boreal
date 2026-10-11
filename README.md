@@ -18,7 +18,7 @@ snares are a food source, never a hazard).**
     `needs.gd` `items.gd` `fire.gd` `scatter.gd` `interact.gd` `shelter.gd`
     `rescue.gd` `world.gd` (step ordering mirrors `world.ts`) `actions.gd`
     `dangers.gd` (snares/fishing/injuries; wolf FSM deliberately unported)
-    `build.gd` `player.gd`
+    `craft.gd` (recipe table + canCraft/craft, port of craft.ts) `build.gd` `player.gd`
 - `tests/` — headless SceneTree tests (`run_tests.sh` convention).
   `goldens.gd` holds reference values extracted from the real TS sim
   (regenerate: `node tools/extract_goldens.mjs` against a copy of `src/sim/*.ts`).
@@ -87,7 +87,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (10/10)
+## Test status (11/11)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -97,6 +97,7 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_camp_water.gd` — camp spot flatness < 0.15 m over its footprint (and flatter than CRASH), within search radius, deterministic; water verts sit exactly on `streamX` ± HALF_W and on the frozen channel-floor formula, below the banks
 - `test_gen_level.gd` — generated level: baked data loads (height_hash pinned), `TerrainHM.heightAt` exact at cell centers + bilinear midpoints, spawn passes the SpawnSelect flatness gate, biome scatter non-empty/deterministic/on-heightmap Y, water rects cover only water cells and quads ride `water_level`, `main.tscn` constructs under `LEVEL=generated` headless with the sim re-seated at the baked spawn
 - `test_dangers.gd` — snares/fishing/injuries (wolves cut): hareSignAt grid goldens, snare tick sequences from fixed rng seeds incl. snowMul delay, world-driven spring→pending→collect, fishRoll hour table + hole table + world fishing flow, injury→infection→sepsis timelines vs TS, sepsis death chain (cause `infection`, 15–30 h band), treatInjury/treatWound resets
+- `test_craft.gd` — craft.ts port: recipe table + canCraft matrix + greedy first-craftable sequence + atomicity goldens vs TS, Actions.craft world flow (zero RNG rolls consumed), snare cross-world determinism across 5 game days, fish yields/usesLeft per seeded roll stream, treat_wound infection reset + TS re-treat predicate
 
 ## Phase 2c (not yet ported)
 Crafting UI, action wheel, rescue E2E, plane-wreck assets (known gaps),

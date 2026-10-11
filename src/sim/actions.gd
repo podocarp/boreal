@@ -305,3 +305,15 @@ static func treat_wound(w: WorldSim) -> bool:
 	Items.inv_remove(w.inventory, "ductTape", 1)
 	w.push_log("You rinse the wound with boiled water and close it with tape. It hurts. It helps.")
 	return true
+
+
+## Craft a recipe by id (TS contextActions tier 6: only craftable recipes are
+## offered; the run() closure logs on success). Consumes no RNG rolls.
+static func craft(w: WorldSim, recipe_id: String) -> bool:
+	var r: Variant = CraftSim.recipe_by_id(recipe_id)
+	if r == null:
+		return false
+	if not CraftSim.craft(w.inventory, r):
+		return false
+	w.push_log("Crafted: %s" % r.label)
+	return true
