@@ -163,24 +163,47 @@ static func craving_mul(hunger: float) -> float:
 
 
 ## Eat: cooked meat >> berries > raw meat (risk).
+## Weight model (owner directive 2026-10-11 v2): food restores hunger as
+## before; the kcal that lands ABOVE a full stomach is banked in
+## needs.calorieBank and converts to mass later at the FILL_KG_PER_DAY cap
+## (needs.tick). DIVERGENCE from TS: TS has no calories — hunger points were
+## the whole story.
 static func eat(w: WorldSim) -> bool:
 	var crave := craving_mul(w.needs.hunger)
-	if Items.inv_has(w.inventory, "meatCooked"):
-		Items.inv_remove(w.inventory, "meatCooked")
-		w.needs.hunger = minf(100.0, w.needs.hunger + 45.0 * crave)
-		return true
-	if Items.inv_has(w.inventory, "berries"):
-		Items.inv_remove(w.inventory, "berries")
-		w.needs.hunger = minf(100.0, w.needs.hunger + 10.0 * crave)
-		return true
-	if Items.inv_has(w.inventory, "meat"):
-		Items.inv_remove(w.inventory, "meat")
-		w.needs.hunger = minf(100.0, w.needs.hunger + 30.0 * crave)
-		if w.roll() < 0.5:
-			w.push_log("Raw meat. Your gut knows it.")
-			w.needs.hydration = maxf(0.0, w.needs.hydration - 10.0)
-		return true
-	return false
+	return _eat_item(w, "meatCooked", 45.0 * crave) \
+		or _eat_item(w, "berries", 10.0 * crave) \
+		or _eat_raw_meat(w)
+
+
+## Try to eat `id` for `points` hunger; bank the surplus kcal proportionally
+## to the fraction of the portion that overflowed a full stomach.
+static func _eat_item(w: WorldSim, id: String, points: float) -> bool:
+	if not Items.inv_has(w.inventory, id):
+		return false
+	Items.inv_remove(w.inventory, id)
+	var before := w.needs.hunger
+	w.needs.hunger = minf(100.0, w.needs.hunger + points)
+	var absorbed := w.needs.hunger - before
+	if points > 1e-9 and absorbed < points - 1e-9:
+		var kcal: float = Items.KCAL.get(id, 0.0)
+		w.needs.calorieBank += kcal * (points - absorbed) / points
+	return true
+
+
+static func _eat_raw_meat(w: WorldSim) -> bool:
+	if not Items.inv_has(w.inventory, "meat"):
+		return false
+	var points := 30.0 * craving_mul(w.needs.hunger)
+	Items.inv_remove(w.inventory, "meat")
+	var before := w.needs.hunger
+	w.needs.hunger = minf(100.0, w.needs.hunger + points)
+	var absorbed := w.needs.hunger - before
+	if absorbed < points - 1e-9:
+		w.needs.calorieBank += Items.KCAL.meat * (points - absorbed) / points
+	if w.roll() < 0.5:
+		w.push_log("Raw meat. Your gut knows it.")
+		w.needs.hydration = maxf(0.0, w.needs.hydration - 10.0)
+	return true
 
 
 ## Cook raw meat at a lit fire.

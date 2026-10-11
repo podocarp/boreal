@@ -177,3 +177,79 @@ does not assert competent-rescued until that lands.
 - `fire_sinking`/`lit_at_camp`/`camp_fuel_now` are computed once at the top of
   `CompetentBot.tick` and shared by the forage/snare/critical gates — don't
   re-declare them lower (GDScript shadowing error).
+
+## Weight-based calorie model (card t_da550b46, owner directive 2026-10-11 v2)
+
+Sim changes (all DIVERGENCE-commented in config.gd / needs.gd / items.gd /
+actions.gd): hunger-at-0 burns MASS (weightKg, start 80 kg; STARVE_KG_PER_DAY
+3.2 game-scale, shiver/sprint multipliers stacked) instead of draining
+health; cutoffs 74/68/60 kg add the performance ladder (walk/dexterity/
+strength + WEAK_ENERGY_MUL 1.3); <60 kg drains health (STARVATION_HP_PER_H
+1.5) and kills nameably ("starvation (malnutrition, 58 kg)"). Surplus kcal
+(Items.KCAL, eaten above a full stomach) bank into calorieBank and refill
+mass at FILL_KG_PER_DAY 0.4. Sleep is a requirement: energy restores ONLY
+while sleeping; waking streaks > 30 h grow the drowsiness debuff to full at
+42 h (DROWSY_AFTER_H/DROWSY_FULL_H). CRITICAL_HUNGER_HP_PER_H deleted.
+weightKg/calorieBank/awakeH are hashed in the determinism test.
+
+Harness before (parent card, frozen hunger-drain sim):
+competent 0% rescued, median 4.0 d, hypothermia=19 starvation=1.
+
+Harness after (20 seeds/policy):
+
+```
+idle       n=20  rescued   0%  died 100%  median 2.0  hypothermia=20 (d2=20)
+naive      n=20  rescued  35% (avg d8.1) died  65%  median 7.0  hypothermia=7 dehydration=6
+competent  n=20  rescued  50% (avg d7.3) died  50%  median 7.0  hypothermia=8 dehydration=2
+  rescue days: d7=8, d8=1, d9=1
+```
+
+Band: idle ~100% hypothermia d2 ✓ (floor holds), naive 65% die ✓ (40-90%),
+competent 50% rescued ✓ (>=50%). TARGET BAND MET. Hypothermia still the #1
+death cause for both dying policies; starvation deaths are gone from the
+harness entirely (the weight tail only bites a never-eats player around
+day 8-11, past the harness deaths).
+
+Iteration log (each step re-ran the 20-seed harness or a per-hour trace):
+
+1. Weight model landed; competent median 4.0 -> 5.0, starvation deaths 1 -> 0.
+   Residual killer: fire-out-at-night freeze (unchanged from parent card).
+2. Friction-light RETRY COOLDOWN (bot): the old bot spammed light_fire 40×/s
+   on failed rolls (cold hands -> p~0.05), burning its whole tinder reserve,
+   then froze beside a pack of bundles. Now one strike per ~1 game-hour.
+3. Night tinder errand un-gated (bot): gather()'s night gate now exempts
+   urgent_wood (fire OUT at night is the one errand a real player makes in
+   the dark); the stock-branch reachability pre-check that deadlocked
+   build-fire with an empty chain is gone.
+4. Signal-run vitals gate (bot): the day-6 shore march now requires
+   hydration>55 / hunger>45 / energy>25 — it used to walk the bot to shore
+   starving and dehydrated (d6 'water ran out' mid-march). Same light_fire
+   cooldown applied to the shore branch.
+5. FLARE FROM CAMP (bot): the flare line lived inside the vitals-gated shore
+   move, so camp-bound bots reached day 10 with a full flare gun and died of
+   "the search gave up". A competent player fires at the day-7 dawn pass
+   from wherever they stand (0.95 detection). This alone took competent
+   20% -> 50%.
+6. emergency-snow deadlock (bot): begin_work grabs the nearest PROP within
+   reach, and a prop whose yield doesn't fit the pack completes with no
+   yield forever — the bot re-scooped one bark prop for 10 h and died of
+   thirst next to a lit fire. Snow tasks now start directly (id -1), and
+   camp_fire stands still while any task runs (tick_work cancels tasks on
+   movement — the old fetch-fuel branch cancelled its own thirst task every
+   tick).
+7. Cold-sleep guard (bot): exhaustion-naps require core > 35.5 °C, and
+   forage/snare side chores require core > COLD_C — a freezing player stays
+   by the fire instead of napping into hypothermia at 34 °C.
+
+test_balance re-pins (DIVERGENCE): naive death assertion moved seed 2 -> 5
+(seed 2 now legitimately gets spotted by its wreck fire at the d7 pass), and
+the competent-rescued gate is RE-ENABLED on seed 3 (stable d7 flare rescue)
+— the old 0%-rescue premise is dead.
+
+Gotchas:
+- Naive rescues (35%) are honest: NaiveBot keeps a fire at the exposed
+  shore, and detection_chance gives anyFire+openGround 0.32/pass over 8
+  passes. If the owner wants naive strictly <40% die-survival, nerf
+  open-ground anyFire detection, not the bots.
+- The harness runtime doubled (~100 s -> ~240 s / 20 seeds) because bots
+  now survive to the rescue window instead of dying at d2-4.

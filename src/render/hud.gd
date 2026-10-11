@@ -21,6 +21,7 @@ var _inv: Label
 var _prompt: Label
 var _injury: Label
 var _toast: Label
+var _weight: Label
 var _toast_left := 0
 var _seen_toasts := 0
 
@@ -31,7 +32,7 @@ func _ready() -> void:
 	var panel := Panel.new()
 	panel.name = "NeedsPanel"
 	panel.position = Vector2(6, 6)
-	panel.size = Vector2(216, 132)
+	panel.size = Vector2(300, 132)
 	var pmat := StyleBoxFlat.new()
 	pmat.bg_color = Color(0.05, 0.07, 0.10, 0.62)
 	pmat.set_corner_radius_all(4)
@@ -61,6 +62,14 @@ func _ready() -> void:
 		fg.bg_color = BAR_COLORS[n]
 		bar.add_theme_stylebox_override("fill", fg)
 		row.add_child(bar)
+		# Weight-based calorie model: kg + condition word next to the hunger
+		# bar (owner directive 2026-10-11 v2 — no 'fat reserve' bar; the
+		# internal calorie counter surfaces as WEIGHT).
+		if n == "hunger":
+			_weight = Label.new()
+			_weight.name = "Weight"
+			_weight.add_theme_font_size_override("font_size", 10)
+			row.add_child(_weight)
 		_bars[n] = bar
 	_temp = Label.new()
 	_temp.name = "CoreTemp"
@@ -135,7 +144,14 @@ func _process(_d: float) -> void:
 	_bars.hunger.value = n.hunger
 	_bars.energy.value = n.energy
 	_bars.health.value = n.health
-	_temp.text = "CORE %.1f°C  FEELS %.0f°C" % [n.coreTemp, w.feels_like()]
+	# weight + condition word (ok / thin / weakened / malnourished)
+	if _weight != null:
+		_weight.text = "  %.0f kg (%s)" % [n.weightKg, Needs.weight_word(Needs.weight_band(n))]
+	# subtle 'exhausted' status while the drowsiness channel is active
+	# (low energy OR sleep deprivation — Change 3)
+	var exhausted: bool = float(Needs.compute_debuffs(n).drowsiness) > 0.0
+	_temp.text = "CORE %.1f°C  FEELS %.0f°C%s" % [n.coreTemp, w.feels_like(),
+		"  EXHAUSTED" if exhausted else ""]
 	_clock.text = "DAY %d   %02d:%02d%s" % [w.day, int(w.hourOfDay),
 		int(fmod(w.hourOfDay, 1.0) * 60.0), "  (sleeping)" if n.sleeping else ""]
 	var lines: Array[String] = []

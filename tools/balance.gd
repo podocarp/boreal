@@ -105,6 +105,12 @@ class BaseBot:
 	var fire_built := false
 	var camped := false
 	var urgent_wood := false
+	# Rebalance 2026-10-11 (calorie-model card): friction-light RETRY COOLDOWN.
+	# A real player strikes the drill once every couple of minutes, not 40×
+	# per second: the old bot burned its entire tinder reserve on failed
+	# rolls (dexterity collapses in the cold → p ≈ 0.05) and froze beside a
+	# pack of bundles it had already spent. Ticks are harness ticks (0.25 s).
+	var light_cooldown := 0
 
 	# helpers live here as statics (nested classes can't see script-level
 	# functions; subclasses inherit these)
@@ -214,11 +220,15 @@ class BaseBot:
 		# short haul of camp — a 70 m round trip in -18 °C for one bundle of
 		# bark is how the old runs froze mid-errand. Prefer targets within
 		# 60 m of camp; otherwise the nearest one, but only in daylight
-		# (night errands are the #1 freeze-mid-walk death).
+		# (night errands are the #1 freeze-mid-walk death). EXCEPTION
+		# (calorie-model card): urgent_wood — a fire that is OUT at night is
+		# the one errand a real player makes in the dark; without this the
+		# bot stripped its home range by day 4 and deadlocked in build-fire
+		# with an empty tinder chain, freezing beside a pack of bark.
 		var t2: Variant = nearest_kind(w, kinds, Vector3(camp_x, 0, camp_z), 60.0)
 		if t2 == null:
 			t2 = nearest_kind(w, kinds)
-			if t2 != null and is_night(w.hourOfDay) \
+			if t2 != null and is_night(w.hourOfDay) and not urgent_wood \
 					and dist(t2.x, t2.z, w.player.x, w.player.z) > 60.0:
 				t2 = null
 		if t2 == null:
@@ -241,6 +251,16 @@ class BaseBot:
 		mover.move(w, camp_x + 1, camp_z + 1, rng)
 
 	func camp_fire(w: WorldSim) -> void:
+		# Rebalance 2026-10-11 (calorie-model card): a work task means STAND —
+		# tick_work cancels any task the moment the player moves. The old loop
+		# kept issuing fetch-fuel/gather movement while a thirst task ran, so
+		# the task was cancelled and restarted every tick (emergency-snow
+		# deadlock: bot scooped snow for 10 h, never drank, died of thirst
+		# next to a lit fire).
+		if w.task != null:
+			phase = "stand(work)"
+			PlayerSim.update_player(w, {"fwd": 0, "strafe": 0, "run": false, "camYaw": 0}, Config.SIM_DT)
+			return
 		# Thirst overrides ALL logistics: snow is everywhere, scoop at the
 		# feet immediately.
 		if w.needs.hydration < 30.0 \
@@ -249,7 +269,15 @@ class BaseBot:
 				and not Items.inv_has(w.inventory, "waterRaw", 1) \
 				and w.task == null:
 			phase = "emergency-snow"
-			Actions.begin_work(w)  # dynamic snow target follows the player
+			# Rebalance 2026-10-11 (calorie-model card): start the snow task
+			# DIRECTLY — begin_work picks the nearest prop within reach (or
+			# fails on "no container"), and a prop whose yield doesn't fit
+			# the pack completes with no yield, forever: the old bot re-scooped
+			# the same bark prop for 10 h and died of thirst next to a fire.
+			w.task = Interact.start_task({"id": -1, "kind": "snow",
+				"x": w.player.x, "z": w.player.z, "uses": 99})
+			# a foot task means STAND
+			PlayerSim.update_player(w, {"fwd": 0, "strafe": 0, "run": false, "camYaw": 0}, Config.SIM_DT)
 			return
 
 		# Fire-first loop, ordered like a competent player: light what you can
@@ -280,17 +308,16 @@ class BaseBot:
 				urgent_wood = true
 			# Bulk-stock the tinder chain BEFORE crafting: a failed friction
 			# light consumes the bundle, so retries must be craft-only.
-			# Rebalance 2026-10-11: only stock what's actually reachable NOW —
-			# the old branch returned on an unreachable night bark errand and
-			# never fell through to build-fire with the pack in hand (idle-
-			# at-night-with-fire-out deadlock).
-			if (not night or urgent_wood) and df < 4 and Items.inv_can_add(w.inventory, "deadfall", 2) \
-					and nearest_kind(w, ["deadfall"], Vector3(camp_x, 0, camp_z), 60.0) != null:
+			# Rebalance 2026-10-11 (calorie-model card): the reachability
+			# pre-check is gone — gather() owns the night/home-range policy
+			# (urgent_wood allows the dark errand; otherwise it falls back to
+			# idle). The old pre-check deadlocked the bot in build-fire with
+			# an empty chain once the home range was stripped.
+			if (not night or urgent_wood) and df < 4 and Items.inv_can_add(w.inventory, "deadfall", 2):
 				phase = "stock-deadfall"
 				gather(w, ["deadfall"], 4)
 				return
-			if (not night or urgent_wood) and bk < 2 and Items.inv_can_add(w.inventory, "bark", 2) \
-					and (not night or nearest_kind(w, ["bark"], Vector3(camp_x, 0, camp_z), 60.0) != null):
+			if (not night or urgent_wood) and bk < 2 and Items.inv_can_add(w.inventory, "bark", 2):
 				phase = "stock-bark"
 				gather(w, ["bark"], 2)
 				return
@@ -303,7 +330,17 @@ class BaseBot:
 				if kd < 2:
 					craft_first(w, "kindling")
 				craft_first(w, "tinderBundle")
-			fire_built = Actions.light_fire(w, Needs.compute_debuffs(w.needs).dexterity) == "lit"
+			# Rebalance 2026-10-11 (calorie-model card): friction-light retry
+			# cooldown — one strike every ~2 real minutes, not 40/s. The old bot
+			# burned every bundle it owned on failed rolls (cold hands → p≈0.05)
+			# and froze beside a pack of deadfall with no tinder left.
+			if light_cooldown > 0:
+				light_cooldown -= 1
+				return
+			var lit_res := Actions.light_fire(w, Needs.compute_debuffs(w.needs).dexterity)
+			fire_built = lit_res == "lit"
+			if lit_res == "failed":
+				light_cooldown = 40  # ~1 game-hour between strikes (10 s real)
 			if fire_built and Items.inv_has(w.inventory, "deadfall", 1):
 				Actions.feed_fire(w)
 			return
@@ -370,7 +407,9 @@ class BaseBot:
 			Actions.eat(w)
 		if w.task == null and w.needs.hydration < 60.0 and w.needs.carriedWaterL < 0.5 \
 				and not Items.inv_has(w.inventory, "waterClean", 1) and not Items.inv_has(w.inventory, "snow", 1):
-			Actions.begin_work(w)  # snow scoop at feet (tin cup from the wreck)
+			# same direct-snow fix as emergency-snow (begin_work grabs props)
+			w.task = Interact.start_task({"id": -1, "kind": "snow",
+				"x": w.player.x, "z": w.player.z, "uses": 99})
 
 	## true = went to sleep this tick (or already asleep). Only sleeps when
 	## standing still at camp with a fire, or when collapsing from exhaustion.
@@ -391,12 +430,16 @@ class BaseBot:
 		# exhaustion-nap (voluntary policy, NOT a forced-sleep mechanic —
 		# the sim never incapacitates) only at camp WITH a healthy fire, or
 		# in daylight — an open-air or fireless nap at night is a
-		# hypothermia death sentence
+		# hypothermia death sentence. Rebalance 2026-10-11 (calorie-model
+		# card): AND only while still warm (core > 35.5) — the old bot napped
+		# at midday with the fire out and a 34 °C core, and slept straight
+		# into hypothermia. A freezing player stays awake and builds a fire.
 		var camp_fuel := 0.0
 		for f in w.fires:
 			if f.lit and dist(f.x, f.z, camp_x, camp_z) < 4.0:
 				camp_fuel = maxf(camp_fuel, f.fuel)
-		var exhausted_nap := w.needs.energy < 15.0 and (camp_fuel > 25.0 or not is_night(w.hourOfDay))
+		var exhausted_nap := w.needs.energy < 15.0 and w.needs.coreTemp > 35.5 \
+				and (camp_fuel > 25.0 or not is_night(w.hourOfDay))
 		if safe_night or exhausted_nap:
 			phase = "sleep"
 			Actions.toggle_sleep(w)
@@ -542,8 +585,28 @@ class CompetentBot extends BaseBot:
 					return
 				Actions.fish(w)
 				return
+		# Rebalance 2026-10-11 (calorie-model card): the FLARE is the win
+		# button and it never leaves the pack — the old flare line lived
+		# inside the vitals-gated shore move, so a camp-bound bot reached
+		# day 10 with a full flare gun and died of 'the search gave up'.
+		# A competent player fires it at the day-7 dawn pass from wherever
+		# they stand (0.95 detection even from forest).
+		if w.day >= 7 and not signalling and w.rescued == null and w.dead == null \
+				and w.hourOfDay >= 8.5 and w.hourOfDay < 16.0 \
+				and Items.inv_has(w.inventory, "flare", 1) \
+				and Items.inv_has(w.inventory, "flareGun", 1):
+			if Actions.fire_flare(w):
+				signalling = true
+			# day 7 dawn pass is 09:00; keep the flare hot through it
 		# day 6+: move to open shore, big fire, signal smoke, stay for dawn pass
-		if w.day >= 6 and not signalling:
+		# Rebalance 2026-10-11 (calorie-model card): the signal run must never
+		# outrank the vitals — the old branch walked to shore starving and
+		# dehydrated (died d6 'water ran out' mid-march), and it spammed
+		# light_fire every tick, burning its tinder reserve on failed rolls.
+		# A competent player only breaks camp for the signal when stable.
+		if w.day >= 6 and not signalling \
+				and w.needs.hydration > 55.0 and w.needs.hunger > 45.0 \
+				and w.needs.energy > 25.0:
 			phase = "signal-move"
 			camp_x = 0.0
 			camp_z = -137.0
@@ -555,8 +618,16 @@ class CompetentBot extends BaseBot:
 			if not mover.move(w, 0.0, -137.0, rng):
 				return
 			if not fire_built:
+				# Rebalance 2026-10-11 (calorie-model card): same retry
+				# cooldown as camp — the old branch burned a bundle per tick.
+				if light_cooldown > 0:
+					light_cooldown -= 1
+					return
 				if Items.inv_has(w.inventory, "tinderBundle", 1):
-					fire_built = Actions.light_fire(w, 1.0) == "lit"
+					var lit_res2 := Actions.light_fire(w, 1.0)
+					fire_built = lit_res2 == "lit"
+					if lit_res2 == "failed":
+						light_cooldown = 40
 				elif Items.inv_has(w.inventory, "kindling", 2) and Items.inv_has(w.inventory, "bark", 1):
 					craft_first(w, "tinderBundle")
 				elif Items.inv_has(w.inventory, "deadfall", 1):
@@ -626,7 +697,8 @@ class CompetentBot extends BaseBot:
 				or Items.inv_has(w.inventory, "berries", 1)
 		if not has_food and w.needs.hunger < 45.0 and not is_night(w.hourOfDay) \
 				and w.task == null and Items.inv_can_add(w.inventory, "berries", 1) \
-				and lit_at_camp and not fire_sinking:
+				and lit_at_camp and not fire_sinking \
+				and w.needs.coreTemp > Config.THERMO.COLD_C:
 			phase = "forage-berries"
 			gather(w, ["berries"], 4)
 			return
@@ -634,7 +706,8 @@ class CompetentBot extends BaseBot:
 		# only when one has sprung (the bot "hears" it the way the TS bot
 		# "sees" fire fuel: world state as perception). Walking to an empty
 		# line every tick starved the fire loop.
-		if snares_set > 0 and not is_night(w.hourOfDay) and w.task == null and not fire_sinking:
+		if snares_set > 0 and not is_night(w.hourOfDay) and w.task == null and not fire_sinking \
+				and w.needs.coreTemp > Config.THERMO.COLD_C:
 			var sprung: Variant = null
 			for s in w.snares:
 				if s.set and s.pending != null and s.pending > 0 \

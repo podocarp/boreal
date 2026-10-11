@@ -11,6 +11,15 @@ var wetness := 0.1
 var sleeping := false
 var autoSip := true
 var carriedWaterL := 0.0
+# DIVERGENCE from TS (weight-based calorie model, owner directive
+# 2026-10-11 v2): the internal calorie counter surfaces as WEIGHT.
+# weightKg starts at 80 (average adult); calorieBank is the surplus-kcal
+# accumulator (eating above stomach fill); awakeH is the waking streak
+# driving sleep deprivation. All three are deterministic needs state.
+var weightKg := Config.NEEDS.WEIGHT_START_KG
+var calorieBank := 0.0
+var awakeH := 0.0
+var weightBand := 0  # 0 ok / 1 thin / 2 weakened / 3 malnourished (toast latch)
 
 
 static func create() -> Needs:
@@ -43,6 +52,33 @@ static func airTempAt(hour: float, base: float, swing: float) -> float:
 	return base + swing * cos(t * PI * 2.0)
 
 
+## Weight band from the calorie-model cutoffs (owner directive 2026-10-11 v2):
+## 0 ok / 1 thin (-7.5%) / 2 weakened (-15%) / 3 malnourished (-25%).
+static func weight_band(n: Needs) -> int:
+	var N := Config.NEEDS
+	if n.weightKg < N.WEIGHT_MALNOURISHED_KG:
+		return 3
+	if n.weightKg < N.WEIGHT_WEAK_KG:
+		return 2
+	if n.weightKg < N.WEIGHT_THIN_KG:
+		return 1
+	return 0
+
+
+static func weight_word(band: int) -> String:
+	return ["ok", "thin", "weakened", "malnourished"][clampi(band, 0, 3)]
+
+
+## Sleep-deprivation pressure 0..1: waking streaks past DROWSY_AFTER_H grow
+## the drowsiness debuff up to full at DROWSY_FULL_H (Change 3 — sleep is a
+## requirement; only sleeping resets the streak).
+static func deprivation(n: Needs) -> float:
+	var N := Config.NEEDS
+	if n.sleeping:
+		return 0.0
+	return clampf((n.awakeH - N.DROWSY_AFTER_H) / (N.DROWSY_FULL_H - N.DROWSY_AFTER_H), 0.0, 1.0)
+
+
 static func compute_debuffs(n: Needs) -> Dictionary:
 	var N := Config.NEEDS
 	var T := Config.THERMO
@@ -51,32 +87,46 @@ static func compute_debuffs(n: Needs) -> Dictionary:
 	var hypo: bool = n.coreTemp < T.HYPOTHERMIA_C
 	var thirsty: bool = n.hydration < N.DEBUFF_FROM
 	var hungry: bool = n.hunger < N.DEBUFF_FROM
-	var sleepy: bool = n.energy < N.DEBUFF_FROM
+	var dep := deprivation(n)
+	var sleepy: bool = n.energy < N.DEBUFF_FROM or dep > 0.0
 	var shivering: bool = cold and not n.sleeping
+	# Weight cutoffs feed the performance ladder (Change 1): thin = small
+	# penalties, weakened = larger, malnourished = maxed. Energy stays pure
+	# performance — weight never incapacitates, only deep loss drains health.
+	var wb := weight_band(n)
+	var wp: float = [0.0, 0.08, 0.18, 0.3][wb]
 	return {
 		"steadiness": NoiseSim.clampf(1.0 - (0.35 if shivering else 0.0) - (0.3 if hypo else 0.0), 0.2, 1.0),
 		# DIVERGENCE from TS (survivability rebalance 2026-10-11): starving
 		# joins the dexterity ladder (Zomboid: hungry != frozen). Movement
-		# stays possible; only your hands slow down.
+		# stays possible; only your hands slow down. Weight model adds the
+		# mass-loss ladder on top of the same channel.
 		"dexterity": NoiseSim.clampf(1.0 - (0.4 if veryCold else 0.0) - (0.3 if hypo else 0.0)
-			- (0.15 if sleepy else 0.0) - (N.HUNGRY_DEX_PENALTY if hungry else 0.0), 0.15, 1.0),
-		"strength": NoiseSim.clampf(1.0 - (0.3 if hungry else 0.0) - (0.25 if hypo else 0.0), 0.2, 1.0),
-		"focus": NoiseSim.clampf(1.0 - (0.2 if thirsty else 0.0) - (0.25 if sleepy else 0.0) - (0.35 if hypo else 0.0), 0.15, 1.0),
+			- ((0.15 + 0.15 * dep) if sleepy else 0.0) - (N.HUNGRY_DEX_PENALTY if hungry else 0.0)
+			- wp, 0.15, 1.0),
+		"strength": NoiseSim.clampf(1.0 - (0.3 if hungry else 0.0) - (0.25 if hypo else 0.0) - wp * 0.5, 0.2, 1.0),
+		"focus": NoiseSim.clampf(1.0 - (0.2 if thirsty else 0.0) - ((0.25 + 0.25 * dep) if sleepy else 0.0) - (0.35 if hypo else 0.0), 0.15, 1.0),
 		"shivering": shivering,
 		"confusion": NoiseSim.clampf((T.HYPOTHERMIA_C - n.coreTemp) / 4.0, 0.2, 1.0) if hypo else 0.0,
-		"drowsiness": NoiseSim.clampf((N.DEBUFF_FROM - n.energy) / N.DEBUFF_FROM, 0.0, 1.0),
+		# Drowsiness channel: low energy OR sleep deprivation (Change 3).
+		"drowsiness": maxf(NoiseSim.clampf((N.DEBUFF_FROM - n.energy) / N.DEBUFF_FROM, 0.0, 1.0), dep),
 	}
 
 
 ## DIVERGENCE from TS (survivability rebalance 2026-10-11): stamina model.
 ## Energy never blocks walking — it scales move speed in from 1.0 at
 ## DEBUFF_FROM down to 1 - WALK_SLOW_AT_ZERO at energy 0.
+## Weight model (owner directive 2026-10-11 v2): the mass-loss bands add a
+## flat walk-speed penalty on top (thin/weakened/malnourished, worst wins).
 static func moveSpeedFactor(n: Needs) -> float:
 	var N := Config.NEEDS
-	if n.energy >= N.DEBUFF_FROM:
-		return 1.0
-	var t := clampf(n.energy / N.DEBUFF_FROM, 0.0, 1.0)
-	return 1.0 - N.WALK_SLOW_AT_ZERO * (1.0 - t)
+	var f := 1.0
+	if n.energy < N.DEBUFF_FROM:
+		var t := clampf(n.energy / N.DEBUFF_FROM, 0.0, 1.0)
+		f -= N.WALK_SLOW_AT_ZERO * (1.0 - t)
+	var wb := weight_band(n)
+	f -= [0.0, N.WALK_SLOW_THIN, N.WALK_SLOW_WEAK, N.WALK_SLOW_MALNOURISHED][wb]
+	return maxf(f, 0.3)
 
 
 ## Sprint lockout below SPRINT_LOCKOUT_ENERGY (soft energy: exhausted you
@@ -103,6 +153,10 @@ static func heatBudget(n: Needs, env: Env, feelsLikeC: float, moving: bool, spri
 	var loss: float = (T.LOSS_K * coldLoad) / insul
 	var exertion: float = T.EXERTION_HEAT * 2.0 if sprinting else (T.EXERTION_HEAT if moving else 0.0)
 	var gain: float = env.fireWarmth * T.FIRE_HEAT_GAIN + exertion + T.METABOLIC_HEAT * heatFuel
+	# Weight model: burning body mass (empty stomach) adds a SMALL metabolic
+	# heat contribution — modest on purpose, cold stays the main killer.
+	if n.hunger <= 0.0:
+		gain += T.METABOLIC_BURN_HEAT
 	return gain - loss
 
 
@@ -127,13 +181,21 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 	# the ladder (dexterity/speed/sprint) handles it. Owner directive
 	# 2026-10-11: NO collapse/pass-out — energy is pure performance and never
 	# incapacitates; the TS forced-sleep-on-exhaustion path is NOT preserved.
+	# Weight model: weakened/malnourished bodies tire faster (WEAK_ENERGY_MUL).
 	if not n.sleeping:
+		n.awakeH += h
 		var drain: float = N.ENERGY_DECAY_PER_H
 		if sprinting:
 			drain *= 2.2
 		elif moving:
 			drain *= 1.3
+		if weight_band(n) >= 2:
+			drain *= N.WEAK_ENERGY_MUL
 		n.energy = NoiseSim.clampf(n.energy - drain * dm * h, 0.0, 100.0)
+	else:
+		# sleeping resets the waking streak (sleep deprivation clears only in
+		# bed — Change 3: sleep is a requirement, not a luxury)
+		n.awakeH = 0.0
 
 	# --- hunger (shivering burns more; food = fuel for cold) ---
 	var shivering: bool = n.coreTemp < T.COLD_C
@@ -141,6 +203,37 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 	if sprinting:
 		hungerDrain *= 1.6
 	n.hunger = NoiseSim.clampf(n.hunger - hungerDrain * dm * h, 0.0, 100.0)
+
+	# --- weight / calorie bookkeeping (DIVERGENCE from TS, owner directive
+	# 2026-10-11 v2: replaces the TS hunger->health critical drain) ---
+	# Stomach at 0 => the body burns mass. Real physics: a 2500 kcal/day
+	# deficit at 7700 kcal/kg is 0.32 kg/day; the game compresses that to
+	# STARVE_KG_PER_DAY with the existing drain multipliers (shiver 1.5x,
+	# sprint 1.6x) stacked on top, so a shivering sprinter burns faster.
+	if n.hunger <= 0.0:
+		var burn: float = N.STARVE_KG_PER_DAY
+		if shivering:
+			burn *= N.SHIVER_HUNGER_MUL
+		if sprinting:
+			burn *= 1.6
+		n.weightKg = maxf(40.0, n.weightKg - burn * dm * h / 24.0)
+	# Surplus calories (eating above stomach fill, see Actions.eat) convert
+	# to mass at a capped rate — FILL_KG_PER_DAY, so a week of good eating is
+	# needed to recover real mass; you cannot binge back to 80 overnight.
+	if n.calorieBank > 0.0 and n.hunger > 0.0:
+		var fill := minf(n.calorieBank, N.FILL_KG_PER_DAY * N.KCAL_PER_KG * h / 24.0)
+		n.calorieBank -= fill
+		n.weightKg = minf(N.WEIGHT_START_KG, n.weightKg + fill / N.KCAL_PER_KG)
+	# Band-crossing toasts (downward crossings only; weightBand latches).
+	var band := weight_band(n)
+	if band > n.weightBand:
+		n.weightBand = band
+		match band:
+			1: events.append("Your clothes hang looser. You're getting thin.")
+			2: events.append("Weak and hollow — you've lost real weight.")
+			3: events.append("Malnourished. Every movement costs you now.")
+	elif band < n.weightBand:
+		n.weightBand = band
 
 	# --- hydration + auto-sip (DIVERGENCE from TS, survivability rebalance
 	# 2026-10-11: fires on ALL movement — sitting/walking/running are all
@@ -173,8 +266,11 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 	# --- health: critical bands only ---
 	if n.hydration < N.CRITICAL_BAND:
 		n.health -= N.CRITICAL_THIRST_HP_PER_H * (1.0 + 5.0 * _critical_depth(n.hydration)) * dm * h
-	if n.hunger < N.CRITICAL_BAND:
-		n.health -= N.CRITICAL_HUNGER_HP_PER_H * (1.0 + 9.0 * _critical_depth(n.hunger)) * dm * h
+	# DIVERGENCE from TS (weight model, owner directive 2026-10-11 v2): an
+	# empty stomach no longer drains health — it burns mass (above). Health
+	# drains only at the malnutrition cutoff (deep mass loss).
+	if weight_band(n) >= 3:
+		n.health -= N.STARVATION_HP_PER_H * dm * h
 	if n.coreTemp < T.HYPOTHERMIA_C:
 		var sev: float = 3.0 if n.coreTemp < 30.0 else 1.0
 		n.health -= T.HYPO_HP_PER_H * sev * dm * h
@@ -188,8 +284,10 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 			died = {"cause": "hypothermia", "detail": "core temp %.1f °C" % n.coreTemp}
 		elif n.hydration < N.CRITICAL_BAND:
 			died = {"cause": "dehydration", "detail": "water ran out"}
-		elif n.hunger < N.CRITICAL_BAND:
-			died = {"cause": "starvation", "detail": "calories ran out"}
+		elif weight_band(n) >= 3:
+			# Weight model: nameable starvation chain — the death reports the
+			# body weight you died at (e.g. "starvation (malnutrition, 58 kg)").
+			died = {"cause": "starvation", "detail": "malnutrition, %.0f kg" % n.weightKg}
 		else:
 			died = {"cause": "exposure", "detail": "the north wore you down"}
 	return {"died": died, "events": events}

@@ -1,10 +1,11 @@
 extends SceneTree
 # Balance harness (tools/balance.gd) regression: the floor policy must die,
-# and runs must be deterministic per seed (same seed -> identical outcome).
-# NOTE: the competent-rescued gate is NOT asserted here — the frozen TS sim
-# itself rescues 0% (Sprint-8 open item in boreal-src AGENTS.md: "harness bot
-# policies regressed after the crash-site move... needs re-tuning toward the
-# rescue band"). See docs/balance-report.md.
+# runs must be deterministic per seed (same seed -> identical outcome), and
+# the competent policy must actually reach the rescue band. The
+# competent-rescued gate was disabled while the frozen TS sim rescued 0%
+# (Sprint-8 open item); the weight-based calorie model (owner directive
+# 2026-10-11 v2) made the sim rescuable — competent now rescues 50% of seeds
+# (seed 3 is a stable d7 flare rescue), so the gate is back.
 const Balance = preload("res://tools/balance.gd")
 
 
@@ -31,14 +32,23 @@ func _init():
 			a.outcome, a.cause, a.day, a.hour, b.outcome, b.cause, b.day, b.hour])
 		fails += 1
 
-	# 3) naive must not be rescued either (no signal policy in a 0%-rescue sim)
-	var naive := Balance.run_game("naive", 2)
+	# 3) naive must die on most seeds but not all (weight-model rebalance
+	# 2026-10-11: the sim is rescuable now — naive dies ~70% of seeds, which
+	# is the target band; seed 2 flipped to rescued once the flare/pass model
+	# stopped being unreachable, so the death assertion moved to seed 5, a
+	# stable hypothermia death). DIVERGENCE from the old 0%-rescue premise.
+	var naive := Balance.run_game("naive", 5)
 	if naive.outcome != "dead":
-		print("  naive seed 2: expected dead, got %s" % naive.outcome)
+		print("  naive seed 5: expected dead, got %s" % naive.outcome)
+		fails += 1
+
+	# 4) competent seed 3 must be RESCUED (re-enabled gate — see header).
+	if a.outcome != "rescued":
+		print("  competent seed 3: expected rescued, got %s (%s d%d)" % [a.outcome, a.cause, a.day])
 		fails += 1
 
 	if fails == 0:
-		print("PASS balance: idle floor dies, per-seed determinism, naive dies")
+		print("PASS balance: idle floor dies, per-seed determinism, naive dies, competent rescued")
 		quit(0)
 	else:
 		print("FAIL balance: %d failures" % fails)

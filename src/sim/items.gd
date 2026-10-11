@@ -29,6 +29,19 @@ const ITEMS := {
 	"cordage": {"label": "Cordage", "stack": 4, "weight": 0.2},
 }
 
+## Food energy in kcal per item unit. DIVERGENCE from TS (weight-based
+## calorie model, owner directive 2026-10-11 v2): the TS sim has no calorie
+## values — hunger points were the whole story. Calories exist here ONLY to
+## feed the weight model's surplus->mass path (Actions.eat banks the part of
+## a food's kcal that lands above a full stomach). Values are realistic for
+## the portion: a handful of winter berries ~80 kcal, a dressed songbird/
+## squirrel ~400 raw, roasted ~600 (fat rendered back in).
+const KCAL := {
+	"berries": 80.0,
+	"meat": 400.0,
+	"meatCooked": 600.0,
+}
+
 
 static func inv_weight(inv: Dictionary) -> float:
 	var w := 0.0

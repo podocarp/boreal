@@ -41,7 +41,10 @@ const NEEDS := {
 	"DEBUFF_FROM": 45.0,
 	"CRITICAL_BAND": 15.0,
 	"CRITICAL_THIRST_HP_PER_H": 1.5,
-	"CRITICAL_HUNGER_HP_PER_H": 0.5,
+	# DIVERGENCE from TS (weight-based calorie model, owner directive
+	# 2026-10-11 v2): CRITICAL_HUNGER_HP_PER_H removed — an empty stomach no
+	# longer drains health directly. Hunger-at-0 burns body MASS (see the
+	# WEIGHT block); only deep mass loss (malnutrition cutoff) drains health.
 	"REGEN_HP_PER_H": 2.0,
 	# DIVERGENCE from TS (survivability rebalance 2026-10-11): auto-sip fires
 	# on ALL movement (sitting/walking/running are all fine), suppressed only
@@ -63,6 +66,34 @@ const NEEDS := {
 	# survival situation". Energy is pure performance (work speed, walk
 	# speed, sprint lockout) and never stops or incapacitates the player.
 	# There is deliberately no forced-sleep path anywhere in the sim.
+	#
+	# --- Weight-based calorie model (owner directive 2026-10-11 v2) ---
+	# No "fat reserve" bar: the internal calorie counter surfaces as WEIGHT.
+	# An average adult starts at 80 kg; an empty stomach burns body mass.
+	# KCAL_PER_KG = 7700 is the real energy density of 1 kg of body tissue
+	# (standard ~7000-7700 kcal figure) and BASE_DEFICIT_KCAL_PER_DAY = 2500
+	# is the real adult deficit (0.32 kg/day). The game compresses that to
+	# STARVE_KG_PER_DAY (~10x game scale) so a never-eats player crosses the
+	# malnutrition cutoff around day 8-11 of the 10-day run: starvation is a
+	# real tail risk, hypothermia stays the #1 killer.
+	"WEIGHT_START_KG": 80.0,
+	"KCAL_PER_KG": 7700.0,
+	"BASE_DEFICIT_KCAL_PER_DAY": 2500.0,
+	"STARVE_KG_PER_DAY": 3.2,        # game-scale base; shiver/activity muls stack on top
+	"FILL_KG_PER_DAY": 0.4,          # surplus->mass cap: no binge back to 80 overnight
+	"WEIGHT_THIN_KG": 74.0,          # -7.5%: mild lethargy (small speed penalties)
+	"WEIGHT_WEAK_KG": 68.0,          # -15%: weakened (bigger penalties, energy drains faster)
+	"WEIGHT_MALNOURISHED_KG": 60.0,  # -25%: critical (penalties maxed + health drain)
+	"STARVATION_HP_PER_H": 1.5,
+	"WEAK_ENERGY_MUL": 1.3,          # weakened: energy drains faster
+	"WALK_SLOW_THIN": 0.07,
+	"WALK_SLOW_WEAK": 0.15,
+	"WALK_SLOW_MALNOURISHED": 0.25,
+	# Sleep deprivation (Change 3): waking streaks past DROWSY_AFTER_H grow a
+	# drowsiness debuff (reuses the drowsiness channel) up to full at
+	# DROWSY_FULL_H; sleeping (voluntary) resets the streak.
+	"DROWSY_AFTER_H": 30.0,
+	"DROWSY_FULL_H": 42.0,
 }
 
 const THERMO := {
@@ -74,6 +105,9 @@ const THERMO := {
 	"SHELTER_INSUL_BONUS": 0.8,
 	"WETNESS_INSUL_PENALTY": 0.6,
 	"METABOLIC_HEAT": 0.6,
+	# Weight model: burning body mass (empty stomach) adds a SMALL metabolic
+	# heat contribution — modest on purpose, cold stays the main killer.
+	"METABOLIC_BURN_HEAT": 0.15,
 	"EXERTION_HEAT": 1.2,
 	"FIRE_HEAT_GAIN": 2.6,
 	"MAX_COOL_PER_H": 2.5,

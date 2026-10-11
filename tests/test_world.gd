@@ -13,6 +13,7 @@ func _init():
 	_scavenge_and_work()
 	_sleep()
 	_stamina_world()
+	_no_collapse_grep()
 	if fails == 0:
 		print("PASS world: determinism + action happy paths")
 		quit(0)
@@ -49,6 +50,9 @@ func _hash(w: WorldSim) -> String:
 	for v in [w.t, w.hourOfDay, w.player.x, w.player.y, w.player.z, w.player.yaw,
 			w.needs.hydration, w.needs.hunger, w.needs.energy, w.needs.health,
 			w.needs.coreTemp, w.needs.wetness, w.needs.carriedWaterL,
+			# weight model state (owner directive 2026-10-11 v2) is part of
+			# the deterministic needs state — hash it.
+			w.needs.weightKg, w.needs.calorieBank, w.needs.awakeH,
 			w.env.airTempC, w.env.windKmh, w.env.fireWarmth, w.env.shelterInsul,
 			w.stillH]:
 		_mix(_bits(v))
@@ -261,3 +265,54 @@ func _stamina_world() -> void:
 		if w.needs.sleeping:
 			_fail("energy 0 must never force sleep via world.step")
 			break
+
+
+## Owner directive 2026-10-11 (verification item c): no collapse/blackout/
+## forced-unconsciousness state exists anywhere in the game code. Grep the
+## sim/game/render sources for collapse-family identifiers in CODE lines
+## (comments explaining the removal are allowed). RescueSim.check_collapse /
+## RESCUE.COLLAPSE_DAY are the pre-existing day-10 rescue deadline — a
+## different mechanic, deliberately kept (parent t_664e2ca0).
+func _no_collapse_grep() -> void:
+	var dir := DirAccess.open("res://src")
+	if dir == null:
+		_fail("cannot open res://src for collapse grep")
+		return
+	var offenders: Array[String] = []
+	var stack: Array[String] = ["res://src"]
+	while not stack.is_empty():
+		var d := DirAccess.open(stack.pop_back())
+		d.list_dir_begin()
+		var name := d.get_next()
+		while name != "":
+			var p := d.get_current_dir().path_join(name)
+			if d.current_is_dir():
+				stack.append(p)
+			elif name.ends_with(".gd"):
+				# rescue.gd owns the day-10 deadline mechanic (kept by design)
+				if name == "rescue.gd":
+					name = d.get_next()
+					continue
+				var f := FileAccess.open(p, FileAccess.READ)
+				var lineno := 0
+				while not f.eof_reached():
+					lineno += 1
+					var line: String = f.get_line()
+					var stripped := line.strip_edges()
+					if stripped.begins_with("#"):
+						continue
+					var lc := line.to_lower()
+					# strip trailing comments: only CODE before '#' is checked
+					var hash_at := lc.find("#")
+					if hash_at >= 0:
+						lc = lc.substr(0, hash_at)
+					for tok in ["collapsed", "collapse(", "blackout", "black out", "passout", "pass out"]:
+						if lc.contains(tok) and not lc.contains("check_collapse"):
+							offenders.append("%s:%d [%s] %s" % [p, lineno, tok, stripped])
+			name = d.get_next()
+		d.list_dir_end()
+	# config.gd's RESCUE.COLLAPSE_DAY is the rescue deadline (kept by design)
+	for o in offenders:
+		if o.contains("COLLAPSE_DAY"):
+			continue
+		_fail("collapse-state code found: %s" % o)
