@@ -40,11 +40,23 @@ snares are a food source, never a hazard).**
 - `src/game/game.gd` — `GameLoop`: owns the `WorldSim`, fixed-step accumulator
   (0.25 s REAL ticks; dt stays real seconds — the #1 historical bug class),
   syncs the 3D rig into `world.player`, harvests sim-log lines into `toasts`.
-  Actions: E interact (collect a sprung snare in reach, else chop/snap/peel/
-  scoop/snow/scavenge via the frozen `Interact` radius), F feed fire, R melt,
-  C cook, Q drink, T eat, X set snare (TS setSnareAction rules incl. the 8 m
-  too-close check), G fish an ice-edge hole, B craft the first craftable
-  recipe (TS craftBest greedy order), H treat wound (duct tape + lit fire).
+  `setup()` is restart-safe (re-creates the world and clears toasts/tick
+  counters). Actions: E interact (collect a sprung snare in reach, else
+  chop/snap/peel/scoop/snow/scavenge via the frozen `Interact` radius), F feed
+  fire, R melt, C cook, Q drink, T eat, X set snare (TS setSnareAction rules
+  incl. the 8 m too-close check), G fish an ice-edge hole, B craft the first
+  craftable recipe (TS craftBest greedy order), H treat wound (duct tape + lit
+  fire).
+- `src/game/game_state.gd` — `GameState`: the framing machine
+  MENU -> PLAYING -> WON / DEAD. Watches `world.rescued` / `world.dead` on
+  every sim tick (only while PLAYING), pauses the sim outside PLAYING, and
+  restarts by re-creating the world from the SAME seed through an optional
+  `rebuild` hook (main.gd re-applies terrain provider, camp fire, player seat)
+  — no process restart.
+- `src/render/game_ui.gd` — `GameUi`: title / win / death screens, code-built
+  CanvasLayer (dim rect + centered labels). ENTER or left-click emits
+  start/restart. Title shows BOREAL + controls; death shows cause + days
+  survived; win shows rescued-on-day-N + days survived.
 - `src/game/camp_site.gd` — grid-samples the frozen `heightAt` near CRASH and
   picks the flattest fire-ring spot (test asserts footprint max−min < 0.15 m);
   the sim's CRASH position itself is untouched.
@@ -85,7 +97,8 @@ snares are a food source, never a hazard).**
 # from the godot-factory repo root
 bash scripts/run_tests.sh games/boreal            # semantic tests, no pixels
 bash scripts/render_shot.sh games/boreal /tmp/boreal.png   # weston+lavapipe shot
-# curated viewpoints: camp | treeline | stream | hud (default: follow player).
+# curated viewpoints: camp | treeline | stream | hud (default: follow player);
+# framing screens: menu | dead | won (SHOT_FROZEN=1 for deterministic shots).
 # SHOT_FROZEN=1 pauses the sim + pins water time for deterministic shots.
 CHECKPOINT=camp SHOT_FROZEN=1 bash scripts/render_shot.sh games/boreal /tmp/camp.png
 # second level (baked terrain-gen world): LEVEL=generated swaps terrain,
@@ -95,7 +108,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (13/13)
+## Test status (14/14)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -108,9 +121,10 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_craft.gd` — craft.ts port: recipe table + canCraft matrix + greedy first-craftable sequence + atomicity goldens vs TS, Actions.craft world flow (zero RNG rolls consumed), snare cross-world determinism across 5 game days, fish yields/usesLeft per seeded roll stream, treat_wound infection reset + TS re-treat predicate
 - `test_balance.gd` — Monte-Carlo harness (tools/balance.gd): idle floor policy dies (hypothermia ≤ d4), per-seed determinism (same seed → identical outcome tuple), naive dies. The competent-rescued gate is NOT asserted — the frozen TS sim itself rescues 0% (Sprint-8 open item; see docs/balance-report.md)
 - `test_dangers_game.gd` — game-loop wiring (headless scripted, fixed seed): X set snare → days of ticks → spring → E collects meat + toast; too-close snare refused with cordage intact; G at a hole (cordage gate, meat delta == usesLeft drop, hit sequence deterministic on seed 9); H treat resets infection/halves severity/consumes tape; B greedy craft + toast; snare-marker node shape + pending indicator
+- `test_framing.gd` — game framing: real rescue detection (seed 34, signal fire on open ground spotted at the day-7 dawn pass) flips PLAYING → WON; pinned hypothermia → DEAD with cause string; restart rebuilds a fresh WorldSim on the same seed (needs at create() defaults, dead/rescued cleared, toasts/ticks reset) and replays to the same outcome; transition guards (start only from MENU, restart only from WON/DEAD, outcomes only observed while PLAYING); the real main scene boots into MENU with the BOREAL title up, Enter starts play, end screens show cause/day copy, UI restart rebuilds
 
 ## Phase 2c (not yet ported)
-Crafting UI, action wheel, rescue E2E, plane-wreck assets (known gaps),
+Crafting UI, action wheel, plane-wreck assets (known gaps),
 audio. Wolves/wildlife: deliberately CUT from the MVP (owner directive
 2026-10-10 — solo + slow environmental death is the tension; no scripted
 encounters). The TS wolf FSM stays unported on purpose.

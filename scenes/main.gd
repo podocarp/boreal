@@ -1,10 +1,12 @@
 extends Node3D
 ## BOREAL phase 2b scene: playable loop (GameLoop drives the frozen sim),
-## survival HUD, water shader, flat-ground camp, day/night lighting.
-## Env: $SHOT_OUT (render_shot.sh), $CHECKPOINT ("camp" | "treeline" |
-## "stream" | "hud" | "water" | "overview" | default: follow player),
-## $SHOT_FROZEN (=1: deterministic shots), $LEVEL ("generated" = baked
-## terrain-gen world from levels/gen_001; default = frozen level, identical).
+## survival HUD, water shader, flat-ground camp, day/night lighting, and the
+## game framing (GameState MENU -> PLAYING -> WON/DEAD + title/end screens).
+## Env: $SHOT_OUT (render_shot.sh), $CHECKPOINT ("menu" | "dead" | "won" |
+## "camp" | "treeline" | "stream" | "hud" | "water" | "overview" | default:
+## follow player), $SHOT_FROZEN (=1: deterministic shots), $LEVEL
+## ("generated" = baked terrain-gen world from levels/gen_001; default =
+## frozen level, identical).
 
 const SEED := 1
 const RENDER_RADIUS := 150.0  # lavapipe budget: cull scatter around the play core
@@ -12,6 +14,9 @@ const SHOT_HOUR := 16.5       # golden-hour light for all checkpoints
 var _shot_saved := false
 var _frozen := false
 var _loop: GameLoop
+var _state: GameState
+var _ui: GameUi
+var _player: CharacterBody3D
 var _water_mat: ShaderMaterial
 var _daynight: DayNight
 var _fire_light: OmniLight3D
@@ -51,7 +56,13 @@ func _ready() -> void:
 	_loop.world.fires.append(FireSim.make(_loop.world.nextFireId,
 		_camp.x, _camp.z, 60.0, true))
 	_loop.world.nextFireId += 1
-	_loop.paused = _frozen
+	_state = GameState.new()
+	_state.name = "GameState"
+	_state.frozen = _frozen
+	_state.rebuild = _rebuild_world
+	add_child(_state)
+	_state.setup(_loop, SEED)
+	_state.state_changed.connect(_on_state_changed)
 	_daynight = DayNight.new()
 	_daynight.name = "DayNight"
 	_daynight.sun = sun
@@ -62,27 +73,52 @@ func _ready() -> void:
 	hud.name = "Hud"
 	hud.loop = _loop
 	add_child(hud)
+	_ui = GameUi.new()
+	_ui.name = "GameUi"
+	add_child(_ui)
+	_ui.build()  # explicit: _ready is deferred under headless scene-construct tests
+	_ui.start_pressed.connect(_state.start)
+	_ui.restart_pressed.connect(_state.restart)
 	_snare_root = Node3D.new()
 	_snare_root.name = "SnareMarkers"
 	add_child(_snare_root)
 	match OS.get_environment("CHECKPOINT"):
+		"menu":
+			# title screen over the frozen camp view
+			hud.visible = false
+			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
+			_state.force_state(GameState.State.MENU)
+		"dead":
+			# deterministic end-screen shot: poke the sim's death record
+			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
+			_loop.world.dead = {"cause": "hypothermia", "detail": "core temp 29.4 °C"}
+			_state.force_state(GameState.State.DEAD)
+		"won":
+			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
+			_loop.world.rescued = {"day": 8, "kind": "dawn",
+				"detail": "The pilot sees your smoke and banks toward you."}
+			_state.force_state(GameState.State.WON)
 		"camp":
+			_state.force_state(GameState.State.PLAYING)
 			hud.visible = false
 			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
 		"water", "overview":
 			# generated-level checkpoints (see GenLevel.checkpoint_cam)
+			_state.force_state(GameState.State.PLAYING)
 			if _hm == null:
-				add_child(_make_player())
+				_add_player()
 			else:
 				hud.visible = false
 				var cam: Array = GenLevel.checkpoint_cam(_hm, _camp,
 					OS.get_environment("CHECKPOINT"))
 				_add_checkpoint_cam(cam[0], cam[1], cam[2])
 		"treeline":
+			_state.force_state(GameState.State.PLAYING)
 			hud.visible = false
 			_add_checkpoint_cam(Vector3(Terrain.CRASH.x + 26.0, 0.0, Terrain.CRASH.z + 12.0),
 				Vector3(Terrain.CRASH.x + 8.0, 0.0, Terrain.CRASH.z + 34.0), 2.0)
 		"stream":
+			_state.force_state(GameState.State.PLAYING)
 			hud.visible = false
 			# look UPSTREAM (+z): the ribbon now terminates where the frozen
 			# channel ends (lake-flatten region), so looking downstream would
@@ -91,9 +127,64 @@ func _ready() -> void:
 			_add_checkpoint_cam(Vector3(Terrain.streamX(z), 0.0, z),
 				Vector3(Terrain.streamX(z + 40.0), 0.0, z + 40.0), 1.7)
 		"hud":
+			_state.force_state(GameState.State.PLAYING)
 			_add_checkpoint_cam(Vector3(_camp.x - 10.0, 0.0, _camp.z - 9.0), _camp, 2.2)
 		_:
-			add_child(_make_player())
+			# live play: title screen first; PLAYING starts on Enter/click
+			_add_player()
+			_state.force_state(GameState.State.MENU)
+
+
+## Live-play rig (kept as a member so restart can re-seat it at spawn).
+func _add_player() -> void:
+	_player = _make_player()
+	add_child(_player)
+
+
+## Restart hook: fresh WorldSim from the SAME seed, then re-apply everything
+## _ready layered on top of setup(): terrain provider, baked-world injection,
+## the camp fire, and the 3D rig's seat. No process restart.
+func _rebuild_world() -> void:
+	_loop.setup(SEED)
+	if _hm != null:
+		_loop.terrain = _hm
+		GenLevel.apply_to_sim(_loop, _hm, SEED)
+	_loop.world.fires.append(FireSim.make(_loop.world.nextFireId,
+		_camp.x, _camp.z, 60.0, true))
+	_loop.world.nextFireId += 1
+	if _player != null:
+		var sp := _camp if _hm != null else Vector3(Terrain.CRASH.x, 0.0, Terrain.CRASH.z)
+		var sy: float = _hm.heightAt(sp.x, sp.z) if _hm != null \
+			else Terrain.heightAt(sp.x, sp.z)
+		# local position: the rig is a direct child of the (identity) root, and
+		# headless scene-construct tests build the tree without entering it.
+		_player.position = Vector3(sp.x, sy + 0.85, sp.z)
+		_player.velocity = Vector3.ZERO
+	for c in _snare_root.get_children():
+		c.queue_free()  # stale markers (snare ids restart at 1)
+
+
+func _on_state_changed(_prev: int, next: int) -> void:
+	var playing: bool = next == GameState.State.PLAYING
+	if _player != null:
+		_player.set_physics_process(playing)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if playing \
+		else Input.MOUSE_MODE_VISIBLE
+	match next:
+		GameState.State.MENU:
+			_ui.show_menu()
+		GameState.State.PLAYING:
+			_ui.hide_all()
+		GameState.State.WON:
+			var r: Dictionary = _loop.world.rescued
+			_ui.show_end(true, "Rescued on day %d — %s flight.\n%s\n\nYou survived %d %s." \
+				% [r.day, r.kind, r.detail, _loop.world.day,
+					"day" if _loop.world.day == 1 else "days"])
+		GameState.State.DEAD:
+			var d: Dictionary = _loop.world.dead
+			_ui.show_end(false, "Cause of death: %s (%s)\n\nYou survived %d %s." \
+				% [d.cause, d.detail, _loop.world.day,
+					"day" if _loop.world.day == 1 else "days"])
 
 
 func _add_environment() -> Environment:

@@ -158,6 +158,8 @@ func _process(_d: float) -> void:
 						else ""])
 			_injury.text = "\n".join(parts)
 	# toast: newest sim-log line, held TOAST_TICKS sim ticks
+	if loop.toasts.size() < _seen_toasts:
+		_seen_toasts = loop.toasts.size()  # restart cleared the loop's toasts
 	if loop.toasts.size() > _seen_toasts:
 		_toast.text = loop.toasts[loop.toasts.size() - 1]
 		_toast_left = TOAST_TICKS

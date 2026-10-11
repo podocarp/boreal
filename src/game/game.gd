@@ -22,8 +22,13 @@ var _acc := 0.0
 var _log_len := 0
 
 
+## (Re)create the world from p_seed. Safe to call mid-process for restart:
+## toasts/tick counters reset too, so the HUD and framing layer resync clean.
 func setup(p_seed := 1) -> void:
 	world = WorldSim.new(p_seed)
+	toasts.clear()
+	tick_count = 0
+	_acc = 0.0
 	_log_len = world.log.size()
 
 
