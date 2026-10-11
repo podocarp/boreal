@@ -35,6 +35,7 @@ var signalFireId: Variant = null
 var flareAgeH: Variant = null
 var stillH := 0.0
 var rescued: Variant = null
+var _sprintLockLogged := false
 
 
 func _init(p_seed := 1, p_difficulty := "ranger") -> void:
@@ -76,6 +77,16 @@ func roll() -> float:
 
 ## Advance the world by one fixed tick (dt REAL seconds). Order mirrors world.ts step().
 func step(dt := Config.SIM_DT, sprinting := false) -> void:
+	# DIVERGENCE from TS (survivability rebalance 2026-10-11): soft energy —
+	# sprint is locked out below SPRINT_LOCKOUT_ENERGY (walking always works).
+	# One log line per lockout episode (HUD toast channel).
+	if sprinting and dead == null and not Needs.sprint_allowed(needs):
+		sprinting = false
+		if not _sprintLockLogged:
+			_sprintLockLogged = true
+			push_log("Too exhausted to sprint.")
+	elif needs.energy >= Config.NEEDS.SPRINT_LOCKOUT_ENERGY:
+		_sprintLockLogged = false
 	t += dt
 	hourOfDay += dt / Config.TIME.REAL_SECONDS_PER_GAME_HOUR
 	if hourOfDay >= 24.0:
@@ -151,7 +162,7 @@ func step(dt := Config.SIM_DT, sprinting := false) -> void:
 	for e in DangerSim.tick_injuries(injuries, dt_game_h(dt), roll):
 		push_log(e)
 
-	var res := Needs.tick(needs, env, dt, player.moving, sprinting, difficulty)
+	var res := Needs.tick(needs, env, dt, player.moving, sprinting, difficulty, task != null)
 	for e in res.events:
 		push_log(e)
 	if res.died != null:

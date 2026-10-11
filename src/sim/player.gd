@@ -28,8 +28,12 @@ static func update_player(w: WorldSim, intent: Dictionary, dt: float) -> void:
 		mz /= mlen
 
 	var zone := Terrain.zoneAt(p.x, p.z)
-	var base: float = Config.PLAYER.RUN_SPEED_MPS if intent.run else Config.PLAYER.WALK_SPEED_MPS
-	var speed := base * Terrain.speedMulAt(zone)
+	# DIVERGENCE from TS (survivability rebalance 2026-10-11): soft energy —
+	# exhausted you still walk, just slower (up to -WALK_SLOW_AT_ZERO at 0),
+	# and sprint is locked out below SPRINT_LOCKOUT_ENERGY.
+	var run: bool = intent.run and Needs.sprint_allowed(w.needs)
+	var base: float = Config.PLAYER.RUN_SPEED_MPS if run else Config.PLAYER.WALK_SPEED_MPS
+	var speed := base * Terrain.speedMulAt(zone) * Needs.moveSpeedFactor(w.needs)
 	p.speed = sqrt(mx * mx + mz * mz) * speed
 	p.moving = p.speed > 0.05
 

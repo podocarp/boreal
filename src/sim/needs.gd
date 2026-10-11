@@ -55,13 +55,34 @@ static func compute_debuffs(n: Needs) -> Dictionary:
 	var shivering: bool = cold and not n.sleeping
 	return {
 		"steadiness": NoiseSim.clampf(1.0 - (0.35 if shivering else 0.0) - (0.3 if hypo else 0.0), 0.2, 1.0),
-		"dexterity": NoiseSim.clampf(1.0 - (0.4 if veryCold else 0.0) - (0.3 if hypo else 0.0) - (0.15 if sleepy else 0.0), 0.15, 1.0),
+		# DIVERGENCE from TS (survivability rebalance 2026-10-11): starving
+		# joins the dexterity ladder (Zomboid: hungry != frozen). Movement
+		# stays possible; only your hands slow down.
+		"dexterity": NoiseSim.clampf(1.0 - (0.4 if veryCold else 0.0) - (0.3 if hypo else 0.0)
+			- (0.15 if sleepy else 0.0) - (N.HUNGRY_DEX_PENALTY if hungry else 0.0), 0.15, 1.0),
 		"strength": NoiseSim.clampf(1.0 - (0.3 if hungry else 0.0) - (0.25 if hypo else 0.0), 0.2, 1.0),
 		"focus": NoiseSim.clampf(1.0 - (0.2 if thirsty else 0.0) - (0.25 if sleepy else 0.0) - (0.35 if hypo else 0.0), 0.15, 1.0),
 		"shivering": shivering,
 		"confusion": NoiseSim.clampf((T.HYPOTHERMIA_C - n.coreTemp) / 4.0, 0.2, 1.0) if hypo else 0.0,
 		"drowsiness": NoiseSim.clampf((N.DEBUFF_FROM - n.energy) / N.DEBUFF_FROM, 0.0, 1.0),
 	}
+
+
+## DIVERGENCE from TS (survivability rebalance 2026-10-11): stamina model.
+## Energy never blocks walking — it scales move speed in from 1.0 at
+## DEBUFF_FROM down to 1 - WALK_SLOW_AT_ZERO at energy 0.
+static func moveSpeedFactor(n: Needs) -> float:
+	var N := Config.NEEDS
+	if n.energy >= N.DEBUFF_FROM:
+		return 1.0
+	var t := clampf(n.energy / N.DEBUFF_FROM, 0.0, 1.0)
+	return 1.0 - N.WALK_SLOW_AT_ZERO * (1.0 - t)
+
+
+## Sprint lockout below SPRINT_LOCKOUT_ENERGY (soft energy: exhausted you
+## trudge, you don't run).
+static func sprint_allowed(n: Needs) -> bool:
+	return n.energy >= Config.NEEDS.SPRINT_LOCKOUT_ENERGY
 
 
 ## Effective insulation: clothing base + shelter bonus, gutted by wetness.
@@ -91,8 +112,9 @@ static func _critical_depth(v: float) -> float:
 
 
 ## Advance needs + thermoregulation by dt REAL seconds.
-## Returns { "died": {cause, detail} | null, "events": [String] }.
-static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, difficulty: String) -> Dictionary:
+## `preoccupied` = a task/action is in progress (w.task != null): auto-sip
+## waits. Returns { "died": {cause, detail} | null, "events": [String] }.
+static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, difficulty: String, preoccupied := false) -> Dictionary:
 	var N := Config.NEEDS
 	var T := Config.THERMO
 	var events: Array[String] = []
@@ -101,6 +123,10 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 	var dm := Config.difficulty_mul(difficulty)
 
 	# --- energy (sleep restore is applied by world.step, not here) ---
+	# SOFT energy (survivability rebalance 2026-10-11): decay never stops you;
+	# the ladder (dexterity/speed/sprint) handles it. Owner directive
+	# 2026-10-11: NO collapse/pass-out — energy is pure performance and never
+	# incapacitates; the TS forced-sleep-on-exhaustion path is NOT preserved.
 	if not n.sleeping:
 		var drain: float = N.ENERGY_DECAY_PER_H
 		if sprinting:
@@ -116,16 +142,19 @@ static func tick(n: Needs, env: Env, dt: float, moving: bool, sprinting: bool, d
 		hungerDrain *= 1.6
 	n.hunger = NoiseSim.clampf(n.hunger - hungerDrain * dm * h, 0.0, 100.0)
 
-	# --- hydration + auto-sip (idle only) ---
+	# --- hydration + auto-sip (DIVERGENCE from TS, survivability rebalance
+	# 2026-10-11: fires on ALL movement — sitting/walking/running are all
+	# fine; suppressed only while preoccupied with a task or asleep) ---
 	var thirstDrain: float = N.HYDRATION_DECAY_PER_H * (1.8 if sprinting else (1.25 if moving else 1.0))
 	n.hydration = NoiseSim.clampf(n.hydration - thirstDrain * dm * h, 0.0, 100.0)
-	if n.autoSip and not n.sleeping and not moving and n.hydration < N.AUTO_SIP_BELOW and n.carriedWaterL > 0.0:
-		var points: float = minf(N.AUTO_SIP_POINTS_PER_H * h, 100.0 - n.hydration)
-		var liters: float = points / N.HYDRATION_PER_LITER
-		var sip := minf(liters, n.carriedWaterL)
-		if sip > 1e-9:
-			n.hydration = NoiseSim.clampf(n.hydration + sip * N.HYDRATION_PER_LITER, 0.0, 100.0)
-			n.carriedWaterL = maxf(0.0, n.carriedWaterL - sip)
+	if n.autoSip and not n.sleeping and not preoccupied \
+			and n.hydration < N.AUTO_SIP_BELOW and n.carriedWaterL > 0.0:
+		# one sip = half a bottle (0.5 L = 25 pts), clamped to carried + 100 cap
+		var sip: float = minf(N.AUTO_SIP_LITER, n.carriedWaterL)
+		var points: float = minf(sip * N.HYDRATION_PER_LITER, 100.0 - n.hydration)
+		if points > 1e-9:
+			n.hydration = NoiseSim.clampf(n.hydration + points, 0.0, 100.0)
+			n.carriedWaterL = maxf(0.0, n.carriedWaterL - points / N.HYDRATION_PER_LITER)
 
 	# --- thermoregulation ---
 	var feels := windchill(env.airTempC, env.windKmh)

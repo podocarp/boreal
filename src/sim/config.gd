@@ -31,7 +31,11 @@ const PLAYER := {
 const NEEDS := {
 	"HYDRATION_DECAY_PER_H": 1.75,
 	"HUNGER_DECAY_PER_H": 1.0,
-	"ENERGY_DECAY_PER_H": 4.0,
+	# DIVERGENCE from TS (survivability rebalance 2026-10-11): 4.0 -> 2.5.
+	# Energy is SOFT (Project Zomboid model): it never blocks walking, it
+	# degrades you on a ladder (dexterity, move speed, sprint lockout) and
+	# never forces sleep or incapacitates (owner directive 2026-10-11).
+	"ENERGY_DECAY_PER_H": 2.5,
 	"SHIVER_HUNGER_MUL": 1.5,
 	"SLEEP_RESTORE_PER_H": 15.0,
 	"DEBUFF_FROM": 45.0,
@@ -39,11 +43,26 @@ const NEEDS := {
 	"CRITICAL_THIRST_HP_PER_H": 1.5,
 	"CRITICAL_HUNGER_HP_PER_H": 0.5,
 	"REGEN_HP_PER_H": 2.0,
-	"AUTO_SIP_BELOW": 60.0,
-	"AUTO_SIP_POINTS_PER_H": 35.0,
+	# DIVERGENCE from TS (survivability rebalance 2026-10-11): auto-sip fires
+	# on ALL movement (sitting/walking/running are all fine), suppressed only
+	# while preoccupied (task in progress) or asleep. Sip = half a bottle
+	# (a water unit is 1 L -> 0.5 L = 25 pts), clamped to carried amount.
+	# With AUTO_SIP_BELOW at 50 the sip lands you ~75, so it is self-limiting
+	# (no per-tick chug loop).
+	"AUTO_SIP_BELOW": 50.0,
+	"AUTO_SIP_LITER": 0.5,
 	"HYDRATION_PER_LITER": 50.0,
 	"CRAVING_K": 0.8,
 	"DIFF": {"bushman": 0.7, "survivorman": 1.3},
+	# Stamina ladder (survivability rebalance 2026-10-11):
+	"SPRINT_LOCKOUT_ENERGY": 15.0,   # below this you cannot sprint
+	"WALK_SLOW_AT_ZERO": 0.3,        # up to -30% move speed at energy 0
+	"HUNGRY_DEX_PENALTY": 0.15,      # starving slows your hands (Zomboid: hungry != frozen)
+	# Owner directive 2026-10-11 (supersedes the collapse spec): NO
+	# collapse/pass-out mechanic — "passing out simply means death in a
+	# survival situation". Energy is pure performance (work speed, walk
+	# speed, sprint lockout) and never stops or incapacitates the player.
+	# There is deliberately no forced-sleep path anywhere in the sim.
 }
 
 const THERMO := {

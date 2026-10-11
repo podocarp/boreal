@@ -12,6 +12,7 @@ func _init():
 	_melt_and_cook()
 	_scavenge_and_work()
 	_sleep()
+	_stamina_world()
 	if fails == 0:
 		print("PASS world: determinism + action happy paths")
 		quit(0)
@@ -202,3 +203,61 @@ func _sleep() -> void:
 	_step(w, 1)
 	if w.needs.sleeping:
 		_fail("should wake at dawn")
+
+
+## DIVERGENCE from TS (survivability rebalance 2026-10-11): world-level
+## stamina wiring — sprint lockout toast, exhausted walk speed, and the
+## no-collapse guarantee (energy 0 never forces sleep) through world.step().
+func _stamina_world() -> void:
+	# sprint lockout: world.step(sprinting=true) below lockout never drains
+	# at the sprint multiplier and logs the toast exactly once per episode
+	var w := WorldSim.new(7)
+	w.needs.energy = 10.0
+	var e0: float = w.needs.energy
+	for i in 12:  # 12 × 2.5 s = 30 s = 1 game-hour of sprint-intent ticks
+		w.step(Config.SIM_DT * 10, true)
+	if w.needs.energy >= e0:
+		_fail("sprint-intent should still drain (at walk rate)")
+	# drain over 1 h at moving=false, sprint suppressed = 2.5*1 = 2.5
+	if absf((e0 - w.needs.energy) - 2.5) > 1e-6:
+		_fail("locked sprint should drain at idle rate, got %.4f" % (e0 - w.needs.energy))
+	var locks := 0
+	for entry in w.log:
+		if str(entry.msg).contains("Too exhausted to sprint"):
+			locks += 1
+	if locks != 1:
+		_fail("expected exactly 1 sprint-lock toast, got %d" % locks)
+	# recovery above the threshold re-arms the toast
+	w.needs.energy = 50.0
+	w.step(Config.SIM_DT, true)
+	w.needs.energy = 10.0
+	w.step(Config.SIM_DT, true)
+	locks = 0
+	for entry in w.log:
+		if str(entry.msg).contains("Too exhausted to sprint"):
+			locks += 1
+	if locks != 2:
+		_fail("sprint-lock toast should re-arm after recovery, got %d" % locks)
+
+	# exhausted walking: PlayerSim slows the sim player but never stops it
+	w = WorldSim.new(7)
+	w.needs.energy = 0.0
+	w.player.x = 0.0
+	w.player.z = 0.0
+	PlayerSim.update_player(w, {"fwd": 1, "strafe": 0, "run": true, "camYaw": 0.0}, Config.SIM_DT)
+	if not w.player.moving:
+		_fail("energy 0 must never block walking")
+	var expect := Config.PLAYER.WALK_SPEED_MPS * Terrain.speedMulAt(w.player.zone) * Needs.moveSpeedFactor(w.needs)
+	if absf(w.player.speed - expect) > 1e-9:
+		_fail("run intent at energy 0 should trudge at slowed walk, got %f want %f" % [w.player.speed, expect])
+
+	# NO collapse/pass-out (owner directive 2026-10-11): energy pinned at 0
+	# through world.step must never force sleep — pure performance only.
+	w = WorldSim.new(9)
+	w.needs.energy = 0.0
+	w.needs.coreTemp = 35.0
+	for i in int(4.0 * 120.0):  # 4 game-hours at energy 0, falling core
+		w.step()
+		if w.needs.sleeping:
+			_fail("energy 0 must never force sleep via world.step")
+			break

@@ -15,6 +15,7 @@ func _init():
 	_heat_budget_goldens()
 	_tuning_targets()
 	_pacing_and_death()
+	_stamina_ladder()
 	if fails == 0:
 		print("PASS needs: windchill goldens + TS tuning targets hold")
 		quit(0)
@@ -187,17 +188,62 @@ func _pacing_and_death() -> void:
 	if not n.carriedWaterL < 2.0:
 		_fail("auto-sip should consume stock")
 
-	# auto-sip does NOT run while moving
+	# DIVERGENCE from TS (survivability rebalance 2026-10-11): auto-sip DOES
+	# run while moving — sitting, walking, running are all fine. TS asserted
+	# "moving should only drain"; the new intent is that a walking player
+	# with carried water never dehydrates below the sip threshold.
 	n = Needs.create()
 	n.hydration = 55.0
 	n.carriedWaterL = 2.0
 	env = Needs.create_env()
 	env.airTempC = 0.0
 	_run(n, env, 4.0, true)
-	if not n.hydration < 55.0:
-		_fail("moving should only drain")
+	if not n.hydration > 55.0:
+		_fail("auto-sip should fire while walking, hydration=%.2f" % n.hydration)
+	if not n.carriedWaterL < 2.0:
+		_fail("walking should sip stock")
+
+	# DIVERGENCE (same): a sip is half a bottle (0.5 L = 25 pts), clamped to
+	# the carried amount. 0.2 L carried -> exactly 0.2 L consumed.
+	n = Needs.create()
+	n.hydration = 40.0
+	n.carriedWaterL = 0.2
+	env = Needs.create_env()
+	env.airTempC = 0.0
+	Needs.tick(n, env, Config.SIM_DT, false, false, "ranger")
+	if absf(n.carriedWaterL) > 1e-9:
+		_fail("sip must clamp to carried amount, left=%f" % n.carriedWaterL)
+	# tick drains thirst first, then sips: 40 - 1.75/120 + 10
+	var want := 40.0 - Config.NEEDS.HYDRATION_DECAY_PER_H * Config.SIM_DT / Config.TIME.REAL_SECONDS_PER_GAME_HOUR + 10.0
+	if absf(n.hydration - want) > 1e-9:
+		_fail("0.2 L sip = 10 pts, expected hydration %.6f, got %.6f" % [want, n.hydration])
+
+	# DIVERGENCE (same): full sip chunk = 0.5 L = 25 pts in one tick
+	n = Needs.create()
+	n.hydration = 40.0
+	n.carriedWaterL = 2.0
+	Needs.tick(n, env, Config.SIM_DT, true, false, "ranger")
+	if absf(n.carriedWaterL - 1.5) > 1e-9:
+		_fail("sip should consume 0.5 L, left=%f" % n.carriedWaterL)
+
+	# DIVERGENCE (same): auto-sip is suppressed while preoccupied (task in
+	# progress) — the new suppression replaces the old "not moving" gate.
+	n = Needs.create()
+	n.hydration = 40.0
+	n.carriedWaterL = 2.0
+	Needs.tick(n, env, Config.SIM_DT, false, false, "ranger", true)
 	if n.carriedWaterL != 2.0:
-		_fail("moving should not sip")
+		_fail("preoccupied should suppress auto-sip")
+	if not n.hydration < 40.0:
+		_fail("preoccupied tick should only drain")
+	# ...and while sleeping
+	n = Needs.create()
+	n.hydration = 40.0
+	n.carriedWaterL = 2.0
+	n.sleeping = true
+	Needs.tick(n, env, Config.SIM_DT, false, false, "ranger")
+	if n.carriedWaterL != 2.0:
+		_fail("sleeping should suppress auto-sip")
 
 	# death at zero hydration takes ~8-10 h, not instantly
 	n = Needs.create()
@@ -241,3 +287,68 @@ func _pacing_and_death() -> void:
 			break
 	if died == null or died.cause != "hypothermia":
 		_fail("expected hypothermia death")
+
+
+## DIVERGENCE from TS (survivability rebalance 2026-10-11): the stamina
+## ladder — soft energy never blocks walking; it slows you and locks sprint.
+## Owner directive 2026-10-11: NO collapse/pass-out — energy is pure
+## performance and never incapacitates (the TS forced-sleep-on-exhaustion
+## path is deliberately NOT ported).
+func _stamina_ladder() -> void:
+	var N := Config.NEEDS
+
+	# baseline decay nerf: 2.5/h idle (was 4.0)
+	var n := Needs.create()
+	n.energy = 90.0
+	var env := Needs.create_env()
+	env.airTempC = 0.0
+	Needs.tick(n, env, H, false, false, "ranger")
+	if absf(n.energy - (90.0 - N.ENERGY_DECAY_PER_H)) > 1e-9:
+		_fail("idle energy decay should be %.1f/h, got %.6f" % [N.ENERGY_DECAY_PER_H, 90.0 - n.energy])
+
+	# move-speed penalty scales in below DEBUFF_FROM, max -30% at 0
+	n = Needs.create()
+	n.energy = N.DEBUFF_FROM
+	if absf(Needs.moveSpeedFactor(n) - 1.0) > 1e-12:
+		_fail("no speed penalty at DEBUFF_FROM")
+	n.energy = N.DEBUFF_FROM / 2.0
+	if absf(Needs.moveSpeedFactor(n) - (1.0 - N.WALK_SLOW_AT_ZERO * 0.5)) > 1e-12:
+		_fail("speed penalty should scale linearly")
+	n.energy = 0.0
+	if absf(Needs.moveSpeedFactor(n) - (1.0 - N.WALK_SLOW_AT_ZERO)) > 1e-12:
+		_fail("speed penalty at 0 energy should be -%.0f%%" % (N.WALK_SLOW_AT_ZERO * 100.0))
+
+	# sprint lockout at SPRINT_LOCKOUT_ENERGY
+	n = Needs.create()
+	n.energy = N.SPRINT_LOCKOUT_ENERGY
+	if not Needs.sprint_allowed(n):
+		_fail("sprint should be allowed at the lockout threshold")
+	n.energy = N.SPRINT_LOCKOUT_ENERGY - 0.1
+	if Needs.sprint_allowed(n):
+		_fail("sprint should be locked below SPRINT_LOCKOUT_ENERGY")
+
+	# hunger joins the dexterity ladder (Zomboid: hungry != frozen)
+	n = Needs.create()
+	n.energy = 90.0
+	n.hunger = N.DEBUFF_FROM - 5.0
+	var d := Needs.compute_debuffs(n)
+	if absf(d.dexterity - (1.0 - N.HUNGRY_DEX_PENALTY)) > 1e-9:
+		_fail("starving should cost dexterity, got %f" % d.dexterity)
+	n.hunger = N.DEBUFF_FROM + 5.0
+	if absf(Needs.compute_debuffs(n).dexterity - 1.0) > 1e-12:
+		_fail("no dexterity penalty above DEBUFF_FROM")
+
+	# NO collapse/pass-out (owner directive 2026-10-11): energy pinned at 0
+	# in the cold for hours must never force sleep and must never add a
+	# death cause of its own — pure performance only.
+	n = Needs.create()
+	n.energy = 0.0
+	env = Needs.create_env()
+	env.airTempC = -20.0
+	env.windKmh = 20.0
+	for i in int(6.0 * 2):  # 6 game-hours at energy 0, falling core
+		var r := Needs.tick(n, env, H / 2.0, false, false, "ranger")
+		if n.sleeping:
+			_fail("energy 0 must never force sleep (no collapse mechanic)")
+		if r.died != null and r.died.cause == "exhaustion":
+			_fail("energy must never be a death cause")

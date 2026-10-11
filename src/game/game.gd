@@ -54,6 +54,8 @@ func step_tick() -> void:
 
 
 ## Snap the sim player to the 3D rig (terrain-follow; mover runs with gravity 0).
+## Also mirrors the stamina ladder onto the mover: exhausted = slower walk,
+## sprint key does nothing below the lockout (the sim logs the toast).
 func _sync_player() -> void:
 	if player == null:
 		return
@@ -64,6 +66,10 @@ func _sync_player() -> void:
 	world.player.moving = Vector2(player.velocity.x, player.velocity.z).length() > 0.15
 	player.global_position.y = world.player.y + 0.85  # capsule center above feet
 	player.velocity.y = 0.0
+	var f := Needs.moveSpeedFactor(world.needs)
+	player.walk_speed = Config.PLAYER.WALK_SPEED_MPS * f
+	player.sprint_speed = (Config.PLAYER.RUN_SPEED_MPS * f) \
+		if Needs.sprint_allowed(world.needs) else player.walk_speed
 
 
 ## E — collect a sprung snare within reach (TS contextActions tier 2), else

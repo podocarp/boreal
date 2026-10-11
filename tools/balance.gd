@@ -111,11 +111,13 @@ class BaseBot:
 	static func dist(x1: float, z1: float, x2: float, z2: float) -> float:
 		return sqrt((x1 - x2) * (x1 - x2) + (z1 - z2) * (z1 - z2))
 
-	static func nearest_kind(w: WorldSim, kinds: Array) -> Variant:
+	static func nearest_kind(w: WorldSim, kinds: Array, center := Vector3.INF, radius := INF) -> Variant:
 		var best: Variant = null
 		var bd := INF
 		for it in w.interactables:
 			if it.uses <= 0 or not (it.kind in kinds):
+				continue
+			if center != Vector3.INF and dist(it.x, it.z, center.x, center.z) > radius:
 				continue
 			var d := dist(it.x, it.z, w.player.x, w.player.z)
 			if d < bd:
@@ -208,6 +210,22 @@ class BaseBot:
 			phase = "idle(no-target:" + ",".join(kinds) + ")"
 			idle(w)
 			return
+		# Rebalance 2026-10-11: home range. A real survivor works within a
+		# short haul of camp — a 70 m round trip in -18 °C for one bundle of
+		# bark is how the old runs froze mid-errand. Prefer targets within
+		# 60 m of camp; otherwise the nearest one, but only in daylight
+		# (night errands are the #1 freeze-mid-walk death).
+		var t2: Variant = nearest_kind(w, kinds, Vector3(camp_x, 0, camp_z), 60.0)
+		if t2 == null:
+			t2 = nearest_kind(w, kinds)
+			if t2 != null and is_night(w.hourOfDay) \
+					and dist(t2.x, t2.z, w.player.x, w.player.z) > 60.0:
+				t2 = null
+		if t2 == null:
+			phase = "idle(far:" + ",".join(kinds) + ")"
+			idle(w)
+			return
+		t = t2
 		phase = "gather:" + t.kind
 		if not mover.move(w, t.x, t.z, rng):
 			return
@@ -254,13 +272,25 @@ class BaseBot:
 		var night := is_night(w.hourOfDay)
 
 		if not fire_built:
+			# Rebalance 2026-10-11: no fire at camp after dark is an emergency —
+			# a real player gathers tinder chain even at night when the fire is
+			# out (the old night-gate deadlocked the bot: build-fire needs a
+			# bundle, crafting needs bark, bark-gather was night-gated).
+			if night and lit == null:
+				urgent_wood = true
 			# Bulk-stock the tinder chain BEFORE crafting: a failed friction
 			# light consumes the bundle, so retries must be craft-only.
-			if (not night or urgent_wood) and df < 4 and Items.inv_can_add(w.inventory, "deadfall", 2):
+			# Rebalance 2026-10-11: only stock what's actually reachable NOW —
+			# the old branch returned on an unreachable night bark errand and
+			# never fell through to build-fire with the pack in hand (idle-
+			# at-night-with-fire-out deadlock).
+			if (not night or urgent_wood) and df < 4 and Items.inv_can_add(w.inventory, "deadfall", 2) \
+					and nearest_kind(w, ["deadfall"], Vector3(camp_x, 0, camp_z), 60.0) != null:
 				phase = "stock-deadfall"
 				gather(w, ["deadfall"], 4)
 				return
-			if (not night or urgent_wood) and bk < 2 and Items.inv_can_add(w.inventory, "bark", 2):
+			if (not night or urgent_wood) and bk < 2 and Items.inv_can_add(w.inventory, "bark", 2) \
+					and (not night or nearest_kind(w, ["bark"], Vector3(camp_x, 0, camp_z), 60.0) != null):
 				phase = "stock-bark"
 				gather(w, ["bark"], 2)
 				return
@@ -281,12 +311,33 @@ class BaseBot:
 		# fire is lit: keep it fed (bulk fetch only with pack room), then camp chores
 		var fire_critical: bool = lit == null or lit.fuel < 15.0
 		# night fetches are allowed ONLY for a dying fire
-		if (not night or fire_critical) and (lit == null or lit.fuel < 50.0) and df < 6 and Items.inv_can_add(w.inventory, "deadfall", 2):
+		# Rebalance 2026-10-11: fetch threshold 50 -> 70. The burn cascade
+		# (10/18/30 %/h by stage) empties a fuel-50 fire in ~2.5 h — a real
+		# player keeps the fire in the big-flame stage through the evening,
+		# not stoking embers at 21:00.
+		if (not night or fire_critical) and (lit == null or lit.fuel < 70.0) and df < 6 and Items.inv_can_add(w.inventory, "deadfall", 2):
 			phase = "fetch-fuel"
 			if night:
 				urgent_wood = true
 			gather(w, ["deadfall"], 6)
 			return
+		# Rebalance 2026-10-11: tinder RESERVE. A competent player NEVER lets
+		# the tinder chain run dry — friction lights fail, bark is scarce, and
+		# a night with wood but no bundle is a hypothermia death (the old bot
+		# burned bark on snares/shelter, then froze beside a pack of deadfall
+		# it could not light). Daylight chore, ranked BELOW fetch-fuel.
+		if not night:
+			var has_bundle := Items.inv_has(w.inventory, "tinderBundle", 1)
+			if not has_bundle:
+				if int(w.inventory.get("kindling", 0)) >= 2 and bk >= 1:
+					craft_first(w, "tinderBundle")
+				elif bk < 1 or kd < 2:
+					phase = "reserve-tinder"
+					gather(w, ["bark", "deadfall"], 2)
+					return
+			if kd < 2 and df >= 2:
+				craft_first(w, "kindling")
+
 		if night and not at_camp and not urgent_wood:
 			phase = "to-camp"
 			mover.move(w, camp_x, camp_z, rng)
@@ -313,6 +364,10 @@ class BaseBot:
 			Actions.cook(w)
 		if Items.inv_has(w.inventory, "meatCooked", 1) and w.needs.hunger < 55.0:
 			Actions.eat(w)
+		# Rebalance 2026-10-11: eat berries too (Actions.eat prefers cooked
+		# meat, berries are the fallback a real player uses between hunts).
+		if Items.inv_has(w.inventory, "berries", 1) and w.needs.hunger < 45.0:
+			Actions.eat(w)
 		if w.task == null and w.needs.hydration < 60.0 and w.needs.carriedWaterL < 0.5 \
 				and not Items.inv_has(w.inventory, "waterClean", 1) and not Items.inv_has(w.inventory, "snow", 1):
 			Actions.begin_work(w)  # snow scoop at feet (tin cup from the wreck)
@@ -333,14 +388,16 @@ class BaseBot:
 					fire_fuel = f
 		# a stage-2 fire burns 18%/h — only a well-fed fire (>=70) survives to dawn
 		var safe_night: bool = is_night(w.hourOfDay) and at_camp and fire_fuel != null and fire_fuel.fuel > 70.0
-		# collapse-nap only at camp WITH a healthy fire, or in daylight — an
-		# open-air or fireless nap at night is a hypothermia death sentence
+		# exhaustion-nap (voluntary policy, NOT a forced-sleep mechanic —
+		# the sim never incapacitates) only at camp WITH a healthy fire, or
+		# in daylight — an open-air or fireless nap at night is a
+		# hypothermia death sentence
 		var camp_fuel := 0.0
 		for f in w.fires:
 			if f.lit and dist(f.x, f.z, camp_x, camp_z) < 4.0:
 				camp_fuel = maxf(camp_fuel, f.fuel)
-		var collapse := w.needs.energy < 15.0 and (camp_fuel > 25.0 or not is_night(w.hourOfDay))
-		if safe_night or collapse:
+		var exhausted_nap := w.needs.energy < 15.0 and (camp_fuel > 25.0 or not is_night(w.hourOfDay))
+		if safe_night or exhausted_nap:
 			phase = "sleep"
 			Actions.toggle_sleep(w)
 			return w.needs.sleeping
@@ -466,8 +523,12 @@ class CompetentBot extends BaseBot:
 			if (i.infected or i.severity > 30.0) and Items.inv_has(w.inventory, "ductTape", 1):
 				Actions.treat_wound(w)
 				break
-		# fish at dawn when idle and near a hole
-		if w.task == null and w.hourOfDay < 10.0 and w.needs.hydration > 45.0 \
+		# fish at dawn when idle and near a hole. Rebalance 2026-10-11:
+		# daylight-gated (a real player doesn't fish at 03:00 in the wind)
+		# and moved BELOW the critical-needs check below, so a starving/hyp-
+		# othermic bot tends the emergency first instead of ping-ponging.
+		if w.task == null and not is_night(w.hourOfDay) and w.hourOfDay < 10.0 \
+				and w.needs.hydration > 45.0 \
 				and Items.inv_has(w.inventory, "cordage", 1) \
 				and dist(w.player.x, w.player.z, camp_x, camp_z) < 40.0:
 			var hole: Variant = null
@@ -529,22 +590,80 @@ class CompetentBot extends BaseBot:
 		if not camped:
 			scout_camp(w)
 
-		# 1) base survival loop whenever critical or the camp fire needs tending
+		# Rebalance 2026-10-11: active foraging — a competent player doesn't
+		# starve next to berry bushes. This runs BEFORE the critical check:
+		# when the pack has no food, hunger IS the emergency (the old bot
+		# routed hunger<30 into the camp loop, which never forages — a
+		# starvation trap). Daylight only; short haul; never while the camp
+		# fire is sinking (fire first — a cold camp kills faster than hunger).
 		var lit_at_camp := false
+		var camp_fuel_now := 0.0
 		for f in w.fires:
 			if f.lit and dist(f.x, f.z, camp_x, camp_z) < 4.0:
 				lit_at_camp = true
+				camp_fuel_now = maxf(camp_fuel_now, f.fuel)
 				break
+		# Rebalance 2026-10-11: a camp fire about to die IS critical — a
+		# competent player notices the flames sinking and refuels before
+		# chasing snares/shelter (the old bot ping-ponged on side chores
+		# while its fire burned to embers, then froze).
+		var fire_sinking := lit_at_camp and camp_fuel_now < 40.0
+		# Rebalance 2026-10-11: a sinking camp fire outranks EVERY side chore —
+		# drop the snare run, drop the bark run, go tend it (stage-2 burn is
+		# 18%/h: fuel 40 is barely 2 h of flame, and the old bot let it die
+		# mid-errand and then froze trying to relight at midnight).
+		if fire_sinking:
+			if dist(w.player.x, w.player.z, camp_x, camp_z) > 8.0:
+				phase = "to-camp"
+				mover.move(w, camp_x, camp_z, rng)
+				return
+			if Items.inv_has(w.inventory, "deadfall", 1):
+				phase = "stoke"
+				Actions.feed_fire(w)
+				return
+		var has_food := Items.inv_has(w.inventory, "meat", 1) \
+				or Items.inv_has(w.inventory, "meatCooked", 1) \
+				or Items.inv_has(w.inventory, "berries", 1)
+		if not has_food and w.needs.hunger < 45.0 and not is_night(w.hourOfDay) \
+				and w.task == null and Items.inv_can_add(w.inventory, "berries", 1) \
+				and lit_at_camp and not fire_sinking:
+			phase = "forage-berries"
+			gather(w, ["berries"], 4)
+			return
+		# Rebalance 2026-10-11: check the snares on the day's rounds — but
+		# only when one has sprung (the bot "hears" it the way the TS bot
+		# "sees" fire fuel: world state as perception). Walking to an empty
+		# line every tick starved the fire loop.
+		if snares_set > 0 and not is_night(w.hourOfDay) and w.task == null and not fire_sinking:
+			var sprung: Variant = null
+			for s in w.snares:
+				if s.set and s.pending != null and s.pending > 0 \
+						and dist(s.x, s.z, camp_x, camp_z) < 60.0:
+					sprung = s
+					break
+			if sprung != null and dist(sprung.x, sprung.z, w.player.x, w.player.z) > 3.0:
+				phase = "snare-check"
+				mover.move(w, sprung.x, sprung.z, rng)
+				return
+			Actions.check_snares(w)
+		# 1) base survival loop whenever critical or the camp fire needs tending
+		# (lit_at_camp / camp_fuel_now / fire_sinking computed above)
 		var critical := w.needs.hydration < 40.0 or w.needs.energy < 30.0 \
-				or w.needs.coreTemp < Config.THERMO.COLD_C or w.needs.hunger < 30.0
+				or w.needs.coreTemp < Config.THERMO.COLD_C or w.needs.hunger < 30.0 \
+				or fire_sinking
+		var fire_needs_topup := not lit_at_camp or camp_fuel_now < 70.0
 		var at_camp_now := dist(w.player.x, w.player.z, camp_x, camp_z) < 8.0
-		if critical or not lit_at_camp or (is_night(w.hourOfDay) and not at_camp_now):
+		if critical or fire_needs_topup or (is_night(w.hourOfDay) and not at_camp_now):
 			super.tick(w)  # includes the night curfew
 			return
 
 		# 2) snares FIRST (passive food beats comfort; sets are cheap and catch
-		#    while you do everything else)
-		if snares_set < 2:
+		#    while you do everything else). Rebalance 2026-10-11: daylight only
+		#    — a real player sets snares on the day's rounds, not after dark
+		#    (the old night snare branch ping-ponged the bot off camp) — and
+		#    only with the fire already fed to 70+ (the old bot chased bark for
+		#    cordage while its fire sank from 60 to 0).
+		if snares_set < 2 and not is_night(w.hourOfDay) and lit_at_camp and camp_fuel_now >= 70.0:
 			phase = "snare"
 			if not Items.inv_has(w.inventory, "cordage", 1):
 				if Items.inv_has(w.inventory, "bark", 4):
@@ -553,8 +672,11 @@ class CompetentBot extends BaseBot:
 					gather(w, ["bark"], 4)
 					return
 			if Items.inv_has(w.inventory, "cordage", 1):
-				var t: Variant = nearest_kind(w, ["water"])  # stream banks = hare sign
-				if t != null and dist(w.player.x, w.player.z, t.x, t.z) > 3.0:
+				# Rebalance 2026-10-11: snare within the camp home range only
+				var t: Variant = nearest_kind(w, ["water"], Vector3(camp_x, 0, camp_z), 60.0)
+				if t == null:
+					snares_set = 2  # no hare sign near camp; move on
+				elif dist(w.player.x, w.player.z, t.x, t.z) > 3.0:
 					mover.move(w, t.x, t.z + 4, rng)
 					return
 				if Actions.set_snare(w) == "set":
