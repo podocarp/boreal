@@ -34,6 +34,7 @@ func _ready() -> void:
 	var env := _add_environment()
 	var sun := _add_sun()
 	_camp = GenLevel.camp_center(_hm) if _hm != null else CampSite.find_center()
+	_add_wreck()
 	var terrain := MeshInstance3D.new()
 	terrain.name = "Terrain"
 	terrain.mesh = GenLevel.terrain_mesh(_hm) if _hm != null \
@@ -101,7 +102,9 @@ func _ready() -> void:
 		"camp":
 			_state.force_state(GameState.State.PLAYING)
 			hud.visible = false
-			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 13.0), _camp, 2.0)
+			# pulled back/up vs the other camp cams so the crash-site wreck
+			# (Terrain.CRASH, ~8 m east of the flat camp spot) fits in frame
+			_add_checkpoint_cam(Vector3(_camp.x + 4.0, 0.0, _camp.z - 18.0), _camp, 2.6)
 		"water", "overview":
 			# generated-level checkpoints (see GenLevel.checkpoint_cam)
 			_state.force_state(GameState.State.PLAYING)
@@ -245,6 +248,19 @@ func _add_water() -> void:
 		else WaterRender.build(_frozen)
 	_water_mat = water.material_override
 	add_child(water)
+
+
+## Crash-site wreck: analytic level = Terrain.CRASH; generated level = the
+## baked spawn + (6,-6) where GenLevel.apply_to_sim puts the wreck
+## interactable. Static decor — restart does not touch it.
+func _add_wreck() -> void:
+	var site := Vector3(_camp.x + 6.0, 0.0, _camp.z - 6.0) if _hm != null \
+		else Vector3(Terrain.CRASH.x, 0.0, Terrain.CRASH.z)
+	var h: float = _hm.heightAt(site.x, site.z) if _hm != null \
+		else Terrain.heightAt(site.x, site.z)
+	var wreck := WreckVisuals.build(site, h, _camp)
+	if wreck != null:
+		add_child(wreck)
 
 
 ## Camp on the flattest spot near CRASH (CampSite grid search).

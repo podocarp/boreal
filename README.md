@@ -75,6 +75,14 @@ snares are a food source, never a hazard).**
 - `src/render/snare_markers.gd` — stake + noose-loop marker at every set
   snare (code-built meshes, 2 shared materials); a red bundle appears at the
   snare when it holds pending game (the pickup marker).
+- `src/render/wreck_visuals.gd` — `WreckVisuals`: the crash-site plane wreck
+  (DeJunes low-poly Cessna FBX, `assets/wreck/`, royalty-free — see
+  `assets/wreck/LICENSE.txt`). Normalized at runtime from its merged vertex
+  AABB (the FBX carries messy Blender export scales), posed nose-toward-camp
+  + pitch/roll/sink, placed at `Terrain.CRASH` (analytic) and baked
+  spawn+(6,-6) (generated) — exactly where the sim's wreck interactable
+  sits on each level. NO material_overlay tint: the mesh has no vertex
+  colors (white-tree lesson).
 - `levels/gen_001/` — **second level: baked terrain-gen world** (seed 1337,
   256², cell 2 m; heights/biomes/meta/spawn JSONs + mesh/collision `.tres`).
   Reproduce with `bash tools/gen_level.sh` — the baked files are the
@@ -108,7 +116,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (14/14)
+## Test status (15/15)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -121,11 +129,13 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_craft.gd` — craft.ts port: recipe table + canCraft matrix + greedy first-craftable sequence + atomicity goldens vs TS, Actions.craft world flow (zero RNG rolls consumed), snare cross-world determinism across 5 game days, fish yields/usesLeft per seeded roll stream, treat_wound infection reset + TS re-treat predicate
 - `test_balance.gd` — Monte-Carlo harness (tools/balance.gd): idle floor policy dies (hypothermia ≤ d4), per-seed determinism (same seed → identical outcome tuple), naive dies. The competent-rescued gate is NOT asserted — the frozen TS sim itself rescues 0% (Sprint-8 open item; see docs/balance-report.md)
 - `test_dangers_game.gd` — game-loop wiring (headless scripted, fixed seed): X set snare → days of ticks → spring → E collects meat + toast; too-close snare refused with cordage intact; G at a hole (cordage gate, meat delta == usesLeft drop, hit sequence deterministic on seed 9); H treat resets infection/halves severity/consumes tape; B greedy craft + toast; snare-marker node shape + pending indicator
+- `test_wreck.gd` — crash-site wreck: model loads and yields a Mesh; `WreckVisuals.build` normalizes to TARGET_SPAN, sinks at the site, poses deterministically; the real main scene places a `Wreck` node exactly at the sim's wreck interactable in BOTH LEVEL modes (analytic CRASH + generated baked spawn+(6,-6))
 - `test_framing.gd` — game framing: real rescue detection (seed 34, signal fire on open ground spotted at the day-7 dawn pass) flips PLAYING → WON; pinned hypothermia → DEAD with cause string; restart rebuilds a fresh WorldSim on the same seed (needs at create() defaults, dead/rescued cleared, toasts/ticks reset) and replays to the same outcome; transition guards (start only from MENU, restart only from WON/DEAD, outcomes only observed while PLAYING); the real main scene boots into MENU with the BOREAL title up, Enter starts play, end screens show cause/day copy, UI restart rebuilds
 
 ## Phase 2c (not yet ported)
-Crafting UI, action wheel, plane-wreck assets (known gaps),
-audio. Wolves/wildlife: deliberately CUT from the MVP (owner directive
+Crafting UI, action wheel, audio. Plane wreck: LANDED 2026-10-11
+(`src/render/wreck_visuals.gd` + `assets/wreck/`, both levels). Wolves/wildlife:
+deliberately CUT from the MVP (owner directive
 2026-10-10 — solo + slow environmental death is the tension; no scripted
 encounters). The TS wolf FSM stays unported on purpose.
 

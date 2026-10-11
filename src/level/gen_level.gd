@@ -136,8 +136,10 @@ static func apply_to_sim(loop: GameLoop, hm: TerrainHM, seed_: int) -> void:
 	for it in Interact.build_interactables(seed_, props):
 		if it.kind != "water" and it.kind != "wreck":
 			kept.append(it)  # analytic stream/wreck entries don't apply
-	kept.append({"id": 900001, "kind": "wreck", "x": c.x + 2.0,
-		"z": c.z - 2.0, "uses": 1})
+	# wreck sits ~8.5 m from the camp center, matching the analytic level's
+	# CRASH-to-camp spacing — at (2,-2) the 8.5 m model swallowed the fire ring
+	kept.append({"id": 900001, "kind": "wreck", "x": c.x + 6.0,
+	"z": c.z - 6.0, "uses": 1})
 	var id := 900002
 	for r in GenContent.water_rects(hm):
 		if float(r["x1"]) < c.x - 80.0 or float(r["x0"]) > c.x + 80.0 \

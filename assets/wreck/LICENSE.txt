@@ -1,0 +1,14 @@
+License: Royalty Free (page-stated)
+
+Source: https://dejunes.itch.io/3d-lowpoly-airplane  ("3D Lowpoly Airplane" by DeJunes)
+Fetched: 2026-10-11 via the itch-asset-fetch skill (file: cessna_152.zip).
+
+The itch.io page states the model is "free to use" / "free to use in any kind
+of project" and tags it "Royalty Free". No formal license file ships inside the
+zip; this note records the page-stated terms as verified on the fetch date
+(2026-10-11). No attribution is required by the page; crediting "DeJunes" is
+polite and done in games/boreal/README.md.
+
+Files used in this repo: cessna_152.fbx -> assets/wreck/plane_cessna.fbx
+(the .blend and the zip stay in the shared library at
+'/srv/shared/game assets/LowPolyPlane_DeJunes/').
