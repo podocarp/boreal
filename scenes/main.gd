@@ -19,6 +19,7 @@ var _flame: MeshInstance3D
 var _sky_mat: ProceduralSkyMaterial
 var _camp := Vector3.ZERO
 var _hm = null  # TerrainHM when LEVEL=generated, else null (frozen Terrain)
+var _snare_root: Node3D  # stake/loop markers, one per world snare
 
 
 func _ready() -> void:
@@ -61,6 +62,9 @@ func _ready() -> void:
 	hud.name = "Hud"
 	hud.loop = _loop
 	add_child(hud)
+	_snare_root = Node3D.new()
+	_snare_root.name = "SnareMarkers"
+	add_child(_snare_root)
 	match OS.get_environment("CHECKPOINT"):
 		"camp":
 			hud.visible = false
@@ -178,9 +182,26 @@ func _add_checkpoint_cam(pos: Vector3, target: Vector3, eye: float) -> void:
 	cam.current = true
 
 
+## Keep one stake/loop marker per world snare (created on set, kept after a
+## spring so the pending game stays visible). Cheap: only diffs by count.
+func _sync_snare_markers() -> void:
+	var snares: Array = _loop.world.snares
+	var h_at := func(x: float, z: float) -> float:
+		return _hm.heightAt(x, z) if _hm != null else Terrain.heightAt(x, z)
+	for s in snares:
+		var mname := "Snare_%d" % int(s.id)
+		var marker: Node3D = _snare_root.get_node_or_null(mname)
+		if marker == null:
+			marker = SnareMarkers.make_marker(s, h_at.call(s.x, s.z))
+			_snare_root.add_child(marker)
+		else:
+			SnareMarkers.update_marker(marker, s)
+
+
 func _process(_d: float) -> void:
 	if _loop != null:
 		_daynight.apply(_loop.world.hourOfDay)
+		_sync_snare_markers()
 		if not _frozen:
 			_water_mat.set_shader_parameter("u_time", _loop.world.t)
 			var stage := 0

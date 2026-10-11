@@ -40,8 +40,11 @@ snares are a food source, never a hazard).**
 - `src/game/game.gd` — `GameLoop`: owns the `WorldSim`, fixed-step accumulator
   (0.25 s REAL ticks; dt stays real seconds — the #1 historical bug class),
   syncs the 3D rig into `world.player`, harvests sim-log lines into `toasts`.
-  Actions: E interact (chop/snap/peel/scoop/snow/scavenge via the frozen
-  `Interact` radius), F feed fire, R melt, C cook, Q drink, T eat.
+  Actions: E interact (collect a sprung snare in reach, else chop/snap/peel/
+  scoop/snow/scavenge via the frozen `Interact` radius), F feed fire, R melt,
+  C cook, Q drink, T eat, X set snare (TS setSnareAction rules incl. the 8 m
+  too-close check), G fish an ice-edge hole, B craft the first craftable
+  recipe (TS craftBest greedy order), H treat wound (duct tape + lit fire).
 - `src/game/camp_site.gd` — grid-samples the frozen `heightAt` near CRASH and
   picks the flattest fire-ring spot (test asserts footprint max−min < 0.15 m);
   the sim's CRASH position itself is untouched.
@@ -54,7 +57,12 @@ snares are a food source, never a hazard).**
 - `src/render/day_night.gd` — sun angle, sky gradient, fog, ambient as a pure
   function of the sim's `hourOfDay`.
 - `src/render/hud.gd` — needs bars, core/feels temp, day+clock, inventory,
-  context prompt, toasts (tick-timed expiry, no wall-clock).
+  context prompt (TS contextActions tier order: snare collect > fish hole >
+  gather target), injury/infection status line when wounded ([H] hint on
+  treatable wounds), toasts (tick-timed expiry, no wall-clock).
+- `src/render/snare_markers.gd` — stake + noose-loop marker at every set
+  snare (code-built meshes, 2 shared materials); a red bundle appears at the
+  snare when it holds pending game (the pickup marker).
 - `levels/gen_001/` — **second level: baked terrain-gen world** (seed 1337,
   256², cell 2 m; heights/biomes/meta/spawn JSONs + mesh/collision `.tres`).
   Reproduce with `bash tools/gen_level.sh` — the baked files are the
@@ -87,7 +95,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (11/11)
+## Test status (12/12)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -98,6 +106,8 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_gen_level.gd` — generated level: baked data loads (height_hash pinned), `TerrainHM.heightAt` exact at cell centers + bilinear midpoints, spawn passes the SpawnSelect flatness gate, biome scatter non-empty/deterministic/on-heightmap Y, water rects cover only water cells and quads ride `water_level`, `main.tscn` constructs under `LEVEL=generated` headless with the sim re-seated at the baked spawn
 - `test_dangers.gd` — snares/fishing/injuries (wolves cut): hareSignAt grid goldens, snare tick sequences from fixed rng seeds incl. snowMul delay, world-driven spring→pending→collect, fishRoll hour table + hole table + world fishing flow, injury→infection→sepsis timelines vs TS, sepsis death chain (cause `infection`, 15–30 h band), treatInjury/treatWound resets
 - `test_craft.gd` — craft.ts port: recipe table + canCraft matrix + greedy first-craftable sequence + atomicity goldens vs TS, Actions.craft world flow (zero RNG rolls consumed), snare cross-world determinism across 5 game days, fish yields/usesLeft per seeded roll stream, treat_wound infection reset + TS re-treat predicate
+- `test_balance.gd` — Monte-Carlo harness (tools/balance.gd): idle floor policy dies (hypothermia ≤ d4), per-seed determinism (same seed → identical outcome tuple), naive dies. The competent-rescued gate is NOT asserted — the frozen TS sim itself rescues 0% (Sprint-8 open item; see docs/balance-report.md)
+- `test_dangers_game.gd` — game-loop wiring (headless scripted, fixed seed): X set snare → days of ticks → spring → E collects meat + toast; too-close snare refused with cordage intact; G at a hole (cordage gate, meat delta == usesLeft drop, hit sequence deterministic on seed 9); H treat resets infection/halves severity/consumes tape; B greedy craft + toast; snare-marker node shape + pending indicator
 
 ## Phase 2c (not yet ported)
 Crafting UI, action wheel, rescue E2E, plane-wreck assets (known gaps),

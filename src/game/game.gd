@@ -60,11 +60,14 @@ func _sync_player() -> void:
 	player.velocity.y = 0.0
 
 
-## E — context gather: chop/snap/peel/scoop/snow/scavenge via the sim's
-## Interact radius. Returns a toast string ("" = silent).
+## E — collect a sprung snare within reach (TS contextActions tier 2), else
+## context gather: chop/snap/peel/scoop/snow/scavenge via the sim's Interact
+## radius. Returns a toast string ("" = silent; sim-log lines toast themselves).
 func interact() -> String:
 	if world.dead != null:
 		return ""
+	if Actions.check_snares(world) > 0:
+		return ""  # "You collect N× small game..." already pushed to the sim log
 	var tgt: Variant = Actions.current_target(world)
 	if tgt == null:
 		return "Nothing within reach."
@@ -95,6 +98,47 @@ func eat() -> String:
 	return "" if Actions.eat(world) else "Nothing to eat."
 
 
+## X — set a snare where hare sign allows (TS setSnareAction: cordage-gated,
+## 8 m too-close check). Success logs its own quality line.
+func set_snare() -> String:
+	match Actions.set_snare(world):
+		"set":
+			return ""
+		"materials":
+			return "Need cordage for a snare."
+		_:
+			return "Too close to another snare — overlapping runs spook the hares."
+
+
+## G — fish an ice-edge hole within reach (TS fish: cordage-gated, dawn/dusk
+## bite better). Caught/missed each log their own line.
+func fish() -> String:
+	match Actions.fish(world):
+		"caught", "missed":
+			return ""
+		"materials":
+			return "Need cordage for a line."
+		_:
+			return "No fish hole here."
+
+
+## B — craft the first craftable recipe (TS main.ts craftBest greedy loop,
+## golden-tested in test_craft). Success logs "Crafted: <label>".
+func craft_best() -> String:
+	for r in CraftSim.RECIPES:
+		if CraftSim.can_craft(world.inventory, r):
+			Actions.craft(world, r.id)
+			return ""
+	return "Nothing you can craft right now."
+
+
+## H — treat the worst wound (TS treatWound: duct tape + lit fire; the TS
+## find-predicate only accepts infected or severity > 30 wounds).
+func treat() -> String:
+	return "" if Actions.treat_wound(world) \
+		else "Need duct tape and a lit fire — and a wound worth treating."
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if world == null or paused:
 		return
@@ -110,6 +154,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_act(drink())
 	elif event.is_action_pressed("eat"):
 		_act(eat())
+	elif event.is_action_pressed("set_snare"):
+		_act(set_snare())
+	elif event.is_action_pressed("fish"):
+		_act(fish())
+	elif event.is_action_pressed("craft"):
+		_act(craft_best())
+	elif event.is_action_pressed("treat"):
+		_act(treat())
 
 
 func _act(msg: String) -> void:

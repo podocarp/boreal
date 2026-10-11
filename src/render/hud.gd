@@ -19,6 +19,7 @@ var _temp: Label
 var _clock: Label
 var _inv: Label
 var _prompt: Label
+var _injury: Label
 var _toast: Label
 var _toast_left := 0
 var _seen_toasts := 0
@@ -89,6 +90,14 @@ func _ready() -> void:
 	_prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_prompt.add_theme_constant_override("outline_size", 6)
 	add_child(_prompt)
+	_injury = Label.new()
+	_injury.name = "Injury"
+	_injury.position = Vector2(6, 146)
+	_injury.add_theme_font_size_override("font_size", 10)
+	_injury.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+	_injury.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	_injury.add_theme_constant_override("outline_size", 5)
+	add_child(_injury)
 	_toast = Label.new()
 	_toast.name = "Toast"
 	_toast.position = Vector2(80, 326)
@@ -98,6 +107,23 @@ func _ready() -> void:
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_toast.add_theme_constant_override("outline_size", 6)
 	add_child(_toast)
+
+
+## Context prompt, mirroring TS contextActions tiers 1–2 (spot verbs win over
+## the generic gather target, matching interact()'s snare-first dispatch).
+func _context_prompt(w: WorldSim, tgt: Variant) -> String:
+	for s in w.snares:
+		if s.pending != null and s.pending > 0 \
+				and sqrt(pow(s.x - w.player.x, 2) + pow(s.z - w.player.z, 2)) < Config.DANGERS.SNARE_COLLECT_DIST_M:
+			return "[E] Collect snare game"
+	for h in w.fishHoles:
+		if h.usesLeft > 0 \
+				and sqrt(pow(h.x - w.player.x, 2) + pow(h.z - w.player.z, 2)) < Config.DANGERS.FISH_REACH_M:
+			return "[G] Fish the hole" if Items.inv_has(w.inventory, "cordage", 1) \
+				else "[G] Fish the hole (needs cordage)"
+	if tgt != null:
+		return "[E] " + str(Interact.INTERACT_LABEL.get(tgt.kind, tgt.kind))
+	return ""
 
 
 func _process(_d: float) -> void:
@@ -117,8 +143,20 @@ func _process(_d: float) -> void:
 		lines.append("%s ×%d" % [Items.ITEMS[id].label, w.inventory[id]])
 	_inv.text = "\n".join(lines)
 	var tgt: Variant = Actions.current_target(w) if not n.sleeping else null
-	_prompt.text = "[E] " + str(Interact.INTERACT_LABEL.get(tgt.kind, tgt.kind)) \
-		if tgt != null else ""
+	_prompt.text = _context_prompt(w, tgt) if not n.sleeping else ""
+	# injury/infection status line (only when wounded)
+	if _injury != null:
+		if w.injuries.is_empty():
+			_injury.text = ""
+		else:
+			var parts: Array[String] = []
+			for inj in w.injuries:
+				parts.append("%s %s%s" % [inj.label,
+					"INFECTED %.0f%%" % inj.infection if inj.infected \
+						else "sev %.0f" % inj.severity,
+					"  [H] treat" if (inj.infected or inj.severity > Config.DANGERS.TREAT_SEVERITY_GT) \
+						else ""])
+			_injury.text = "\n".join(parts)
 	# toast: newest sim-log line, held TOAST_TICKS sim ticks
 	if loop.toasts.size() > _seen_toasts:
 		_toast.text = loop.toasts[loop.toasts.size() - 1]
