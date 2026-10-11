@@ -17,6 +17,7 @@ var tick_count := 0
 var paused := false              # SHOT_FROZEN: freeze the sim for deterministic shots
 signal toast_shown(text: String)
 signal ticked(tick: int)
+signal action_performed(name: String)  # every action key press (UI confirm SFX)
 
 var _acc := 0.0
 var _log_len := 0
@@ -148,28 +149,29 @@ func _unhandled_input(event: InputEvent) -> void:
 	if world == null or paused:
 		return
 	if event.is_action_pressed("interact"):
-		_act(interact())
+		_act("interact", interact())
 	elif event.is_action_pressed("feed_fire"):
-		_act(feed_fire())
+		_act("feed_fire", feed_fire())
 	elif event.is_action_pressed("melt"):
-		_act(melt())
+		_act("melt", melt())
 	elif event.is_action_pressed("cook"):
-		_act(cook())
+		_act("cook", cook())
 	elif event.is_action_pressed("drink"):
-		_act(drink())
+		_act("drink", drink())
 	elif event.is_action_pressed("eat"):
-		_act(eat())
+		_act("eat", eat())
 	elif event.is_action_pressed("set_snare"):
-		_act(set_snare())
+		_act("set_snare", set_snare())
 	elif event.is_action_pressed("fish"):
-		_act(fish())
+		_act("fish", fish())
 	elif event.is_action_pressed("craft"):
-		_act(craft_best())
+		_act("craft", craft_best())
 	elif event.is_action_pressed("treat"):
-		_act(treat())
+		_act("treat", treat())
 
 
-func _act(msg: String) -> void:
+func _act(name: String, msg: String) -> void:
+	action_performed.emit(name)
 	if msg != "":
 		toast_shown.emit(msg)
 

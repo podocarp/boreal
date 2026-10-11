@@ -15,6 +15,7 @@ var _shot_saved := false
 var _frozen := false
 var _loop: GameLoop
 var _state: GameState
+var _audio: AudioDirector
 var _ui: GameUi
 var _player: CharacterBody3D
 var _water_mat: ShaderMaterial
@@ -64,6 +65,11 @@ func _ready() -> void:
 	add_child(_state)
 	_state.setup(_loop, SEED)
 	_state.state_changed.connect(_on_state_changed)
+	_audio = AudioDirector.new()
+	_audio.name = "AudioDirector"
+	_audio.loop = _loop
+	_audio.state = _state
+	add_child(_audio)  # _ready wires ticked/action/state_changed; headless-safe
 	_daynight = DayNight.new()
 	_daynight.name = "DayNight"
 	_daynight.sun = sun

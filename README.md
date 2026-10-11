@@ -83,6 +83,22 @@ snares are a food source, never a hazard).**
   spawn+(6,-6) (generated) — exactly where the sim's wreck interactable
   sits on each level. NO material_overlay tint: the mesh has no vertex
   colors (white-tree lesson).
+- `src/audio/audio_map.gd` — `AudioMap`: the PURE sim-state → sound mapping
+  (static functions, no Node/audio APIs, headless-testable). `map_state(dict)`
+  → `{loops: {fire_crackle|wind_loop: vol}, step_interval, step_vol}`;
+  `from_world(w, game_state)` extracts fire warmth, windKmh (storm-multiplied),
+  storm severity, speed and zone from the frozen sim. Wolves are CUT, so no
+  growl mapping (owner directive).
+- `src/audio/audio_director.gd` — `AudioDirector`: consumes GameLoop state on
+  every sim tick. Runtime-created Master/Ambience/SFX buses, two loop players
+  (fire crackle volume = warmth at player; wind bed volume from windKmh,
+  smoothed attack/release), footstep cadence on the sim-tick accumulator
+  (interval from speed, volume from zone, 5 rotating variants — no randf),
+  and event one-shots: UI confirm on every action key, rescue plane flyby on
+  WON, death sting on DEAD (`GameState.state_changed`). All playback is
+  guarded behind a non-headless check; the mapping still runs headless.
+- `assets/audio/` — 10 CC0 OGGs (OGA fireplace/wind/propeller/game-over/menu-
+  tick + Kenney RPG footstep variants), provenance in `assets/audio/LICENSE.txt`.
 - `levels/gen_001/` — **second level: baked terrain-gen world** (seed 1337,
   256², cell 2 m; heights/biomes/meta/spawn JSONs + mesh/collision `.tres`).
   Reproduce with `bash tools/gen_level.sh` — the baked files are the
@@ -116,7 +132,7 @@ LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
 godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
-## Test status (15/15)
+## Test status (16/16)
 - `test_rng.gd` — mulberry32 + `roll()` seed mix bit-exact vs TS (7 seeds × 20 outputs + raw u32 path)
 - `test_terrain.gd` — hash2/valueNoise2/fbm2 bit-exact; heightAt/zoneAt/streamX ±1e-9 (libm drift allowance)
 - `test_needs.gd` — windchill/airTemp/heatBudget goldens + all TS tuning-target tests (walking @ feels −25 ≈ stable, idle @ −20 → hypothermia 3–7 h, fire rescue, soaked crisis, shelter gain, food=fuel, death chains, auto-sip)
@@ -131,9 +147,12 @@ godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen 
 - `test_dangers_game.gd` — game-loop wiring (headless scripted, fixed seed): X set snare → days of ticks → spring → E collects meat + toast; too-close snare refused with cordage intact; G at a hole (cordage gate, meat delta == usesLeft drop, hit sequence deterministic on seed 9); H treat resets infection/halves severity/consumes tape; B greedy craft + toast; snare-marker node shape + pending indicator
 - `test_wreck.gd` — crash-site wreck: model loads and yields a Mesh; `WreckVisuals.build` normalizes to TARGET_SPAN, sinks at the site, poses deterministically; the real main scene places a `Wreck` node exactly at the sim's wreck interactable in BOTH LEVEL modes (analytic CRASH + generated baked spawn+(6,-6))
 - `test_framing.gd` — game framing: real rescue detection (seed 34, signal fire on open ground spotted at the day-7 dawn pass) flips PLAYING → WON; pinned hypothermia → DEAD with cause string; restart rebuilds a fresh WorldSim on the same seed (needs at create() defaults, dead/rescued cleared, toasts/ticks reset) and replays to the same outcome; transition guards (start only from MENU, restart only from WON/DEAD, outcomes only observed while PLAYING); the real main scene boots into MENU with the BOREAL title up, Enter starts play, end screens show cause/day copy, UI restart rebuilds
+- `test_audio_map.gd` — audio mapping (headless, no audio driver): `AudioMap.map_state` deterministic; crafted states (fire warm → crackle at warmth volume, storm 0.9 → wind loud, calm → silent, run cadence < walk cadence, lake ice louder than forest, MENU → total silence); real-WorldSim states via `from_world` (lit fire at player → strong crackle, frozen day-4 storm → severity 0.85 + loud wind); every registered stream file imports as an AudioStream; the real main scene boots with an `AudioDirector` that consumes sim ticks headless without creating players
 
 ## Phase 2c (not yet ported)
-Crafting UI, action wheel, audio. Plane wreck: LANDED 2026-10-11
+Crafting UI, action wheel. Audio: LANDED 2026-10-11 (`src/audio/` —
+sim-state-driven ambience + SFX, CC0 packs in `assets/audio/`; music tracks
+and a volume-settings menu deliberately out of scope). Plane wreck: LANDED 2026-10-11
 (`src/render/wreck_visuals.gd` + `assets/wreck/`, both levels). Wolves/wildlife:
 deliberately CUT from the MVP (owner directive
 2026-10-10 — solo + slow environmental death is the tension; no scripted

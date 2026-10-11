@@ -1,0 +1,41 @@
+boreal audio assets — all CC0 1.0 Universal (public domain), verified 2026-10-11
+================================================================================
+Every file below was downloaded from OpenGameArt.org or Kenney.nl and re-encoded
+to mono OGG (ffmpeg libvorbis -q 4) where noted. License verified by reading the
+source page's license badge/text on the fetch date. CC0 = no attribution
+required; attribution listed for goodwill.
+
+fire_crackle.ogg
+  Source: https://opengameart.org/content/fireplace-sound-loop
+  Author: PagDev — license CC0 (page badge verified 2026-10-11)
+  Original: fire.wav (29.3 s loop). Re-encoded mono OGG, unchanged content.
+
+wind_loop.ogg
+  Source: https://opengameart.org/content/wind-whoosh-loop
+  Author: SketchMan3 — license CC0 (page badge verified 2026-10-11)
+  Original: "wind woosh loop.ogg" (6.0 s loop), downmixed to mono.
+
+plane_flyby.ogg
+  Source: https://opengameart.org/content/propeller-cartoon-loop
+  Author: Mish7913 — license CC0 (page badge verified 2026-10-11)
+  Original: 1.67 s propeller loop; reworked into a 6.68 s flyby one-shot
+  (looped x4 with a 1.2 s fade-in / 1.5 s fade-out volume envelope).
+
+death_sting.ogg
+  Source: https://opengameart.org/content/game-over-0
+  Author: zuvizu — license CC0 (page badge verified 2026-10-11)
+  Original: GAMEOVER.wav (8.6 s), downmixed to mono OGG.
+
+ui_confirm.ogg
+  Source: https://opengameart.org/content/menu-select-tick
+  Author: mikeask — license CC0 (page badge verified 2026-10-11)
+  Original: "menu tick.wav" (0.14 s), downmixed to mono OGG.
+
+footstep_00.ogg .. footstep_04.ogg
+  Source: https://kenney.nl/assets/rpg-audio  (Kenney RPG Audio, 50 files)
+  Author: Kenney — license Creative Commons CC0 (page stated 2026-10-11)
+  Original: Audio/footstep00..04.ogg, used as-is (5 alternating variants).
+
+Full Kenney packs are also kept in the shared library:
+  /srv/shared/game assets/KenneyRPGAudio_Kenney/
+  /srv/shared/game assets/KenneyInterfaceSounds_Kenney/
