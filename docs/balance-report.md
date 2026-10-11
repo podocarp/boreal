@@ -85,3 +85,95 @@ frozen sim itself; closing it is a rebalance of `Config.gd`/`config.ts`
 - TS harness without node_modules: copy `src/` + `tests/sim/balance*.ts` to a
   scratch dir, append `.ts` to relative imports, `{"type":"module"}` package
   json, run with Node ≥ 22 (`node tests/sim/balance_main.ts N`).
+
+---
+
+# Rebalance 2026-10-11 (card t_664e2ca0): soft energy + auto-sip everywhere
+
+Owner directives landed this card (the second supersedes the first):
+
+1. Energy/stamina must be PURE performance (work speed, walk speed, sprint
+   lockout) and must never cause collapse or death.
+2. REMOVE the collapse/pass-out mechanic entirely — "passing out simply means
+   death in a survival situation". No forced sleep, no blackout, no
+   forced-unconsciousness state anywhere in the sim. The old TS
+   forced-sleep-on-exhaustion path is deliberately NOT ported.
+
+## Sim changes (DIVERGENCE from TS, marked in config.gd)
+
+- `ENERGY_DECAY_PER_H` 4.0 -> 2.5.
+- Stamina ladder: `SPRINT_LOCKOUT_ENERGY` 15.0 (sprint refused below it, HUD
+  toast "Too exhausted to sprint." once per episode), `WALK_SLOW_AT_ZERO` 0.3
+  (linear move-speed penalty below `DEBUFF_FROM`, max -30% at energy 0),
+  `HUNGRY_DEX_PENALTY` 0.15 (starving adds a dexterity contribution; movement
+  stays possible).
+- Auto-sip fires on ALL movement (idle/walk/run), suppressed only while
+  `preoccupied` (a task/action is in progress) or asleep. Sip = half a bottle
+  (0.5 L = 25 pts), clamped to carried amount; `AUTO_SIP_BELOW` 50 makes it
+  self-limiting.
+- NO collapse/pass-out: `Needs.tick()` no longer returns `collapsed`, the
+  world's forced-sleep-on-collapse block and the "Your legs give out..." log
+  line are deleted, and tests assert energy 0 NEVER forces sleep and never
+  produces an exhaustion death cause. Death stays owned by the cold/thirst/
+  starvation health drains. (`RescueSim.check_collapse` is the pre-existing
+  day-10 rescue deadline, unrelated to energy — kept.)
+
+## Harness after sim changes (20 seeds/policy)
+
+Before (frozen sim, this file's first table): competent median 2.0 d, 100%
+dead (hypothermia 11 / starvation 8 / dehydration 1).
+
+After sim changes + bot policy fixes (below):
+
+```
+idle       n=20  rescued 0%  died 100%  median 2.0  hypothermia=20 (d2=20)
+naive      n=20  rescued 0%  died 100%  median 2.0  hypothermia=20 (d2=20)
+competent  n=20  rescued 0%  died 100%  median 4.0  hypothermia=19 starvation=1
+  death days: d3=4, d4=7, d5=6, d6=2, d7=1
+```
+
+Iteration log (each step re-ran the 20-seed harness):
+
+1. Fire-fetch threshold 50 -> 70: the burn cascade (10/18/30 %/h by stage)
+   empties a fuel-50 fire in ~2.5 h; the bot was stoking embers at 21:00.
+2. Night tinder emergency: no fire at camp after dark now allows tinder-chain
+   gathering (the old night-gate deadlocked: build-fire needs a bundle,
+   crafting needs bark, bark-gather was night-gated).
+3. Fish branch daylight-gated (bot ping-ponged fish<->curfew at 03:00).
+4. Berry eat + forage added; forage moved BEFORE the critical/camp-loop check
+   (hunger<30 routed into the camp loop which never forages — a starvation
+   trap next to berry bushes).
+5. Home-range gathering: prefer targets within 60 m of camp; distant targets
+   allowed in daylight only (night errands were the #1 freeze-mid-walk death).
+   A strict 60 m cap deadlocked sparse-resource camps into idle-freezing, so
+   the fallback is distance-permissive by day.
+6. Pack-full dump-wood (a full pack of deadfall must never deadlock the
+   tinder chain); snare target search capped to 60 m of camp.
+7. Fire-first priority: camp fire < 70 routes into the camp loop (fetch/stoke)
+   and outranks snares/shelter/forage; fire < 40 = "sinking" -> immediate
+   stoke/return. Side chores only run with a topped-up fire.
+8. Snare collect runs only when a line has actually sprung (walking to an
+   empty line every tick starved the fire loop).
+
+## Band status — NOT met, and why (honest)
+
+Target band: competent rescued >=50%. Current: 0% rescued, median 4.0 d
+(was 2.0). The energy-economy root cause the card diagnosed is real and is
+now fixed — deaths moved off the d2 cluster — but the residual killer is the
+hunger->health-drain model itself: `CRITICAL_HUNGER_HP_PER_H` makes hunger-at-
+0 a slow death sentence no policy-realistic foraging bot can out-work in
+winter, and hypothermia still dominates because a sinking fire at -20 °C kills
+faster than any chore list. The frozen TS reference harness rescues 0% for
+the same reasons (see first section). The structural fix is the weight-based
+calorie model (card t_da550b46, child of this card): hunger-at-0 burns mass
+instead of health, malnutrition is a day-8-11 tail risk, hypothermia stays
+#1. Re-measure the band there; `tests/test_balance.gd` still deliberately
+does not assert competent-rescued until that lands.
+
+## Gotchas
+
+- The competent bot's `sleep()` "exhaustion-nap" is VOLUNTARY policy (a human
+  choice), not a sim mechanic — the sim itself never forces sleep.
+- `fire_sinking`/`lit_at_camp`/`camp_fuel_now` are computed once at the top of
+  `CompetentBot.tick` and shared by the forage/snare/critical gates — don't
+  re-declare them lower (GDScript shadowing error).
