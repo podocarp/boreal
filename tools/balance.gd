@@ -5,7 +5,7 @@ extends SceneTree
 ## distributions so Config.gd tuning can target a difficulty band.
 ##
 ## Usage (from repo root):
-##   godot --headless --path games/boreal --script res://tools/balance.gd -- [seedsPerPolicy]
+##   godot --headless --path . --script res://tools/balance.gd -- [seedsPerPolicy]
 ## Default 20 seeds/policy. Deterministic per seed (world roll() stream +
 ## per-bot xorshift-ish stream; no wall-clock, no randf()).
 ##

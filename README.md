@@ -1,6 +1,6 @@
 # boreal (Godot port) — MVP complete
 
-Standalone Godot 4.7.1 port of the BOREAL survival sim (`boreal-src/` TypeScript).
+Standalone Godot 4.7 port of the BOREAL survival sim (original TypeScript/three.js prototype: [podocarp/boreal-ts](https://github.com/podocarp/boreal-ts)).
 **MVP review 2026-10-11: `docs/MVP-REVIEW.md` — full gate evidence (suite, CI
 steps, fresh clone, web export + smoke, screenshots).**
 **Phase 1 = pure sim core + analytic terrain, golden-value tested (frozen).
@@ -120,18 +120,18 @@ snares are a food source, never a hazard).**
 
 ## Run
 ```bash
-# from the godot-factory repo root
-bash scripts/run_tests.sh games/boreal            # semantic tests, no pixels
-bash scripts/render_shot.sh games/boreal /tmp/boreal.png   # weston+lavapipe shot
+# from the repo root (this repo IS the Godot project — open it in the editor, or:)
+bash scripts/run_tests.sh .                       # semantic tests, no pixels
+bash scripts/render_shot.sh . /tmp/boreal.png     # headless shot (weston + Vulkan; NixOS notes in docs/rendering.md)
 # curated viewpoints: camp | treeline | stream | hud (default: follow player);
 # framing screens: menu | dead | won (SHOT_FROZEN=1 for deterministic shots).
 # SHOT_FROZEN=1 pauses the sim + pins water time for deterministic shots.
-CHECKPOINT=camp SHOT_FROZEN=1 bash scripts/render_shot.sh games/boreal /tmp/camp.png
+CHECKPOINT=camp SHOT_FROZEN=1 bash scripts/render_shot.sh . /tmp/camp.png
 # second level (baked terrain-gen world): LEVEL=generated swaps terrain,
 # scatter, water and spawn; checkpoints camp | water | overview.
 LEVEL=generated CHECKPOINT=overview SHOT_FROZEN=1 \
-  bash scripts/render_shot.sh games/boreal shots/gen_overview.png
-godot --headless --path games/boreal --script res://tools/gen_scene.gd  # regen main.tscn
+  bash scripts/render_shot.sh . shots/gen_overview.png
+godot --headless --path . --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
 ## Play the web build

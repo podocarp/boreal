@@ -4,3 +4,6 @@ shots/*.tmp
 # build artifacts — the itch zip is ~30 MB; rebuild with `bash tools/export.sh`
 dist/
 
+*.import
+.shots-tmp/
+.DS_Store

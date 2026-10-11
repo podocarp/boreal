@@ -9,7 +9,7 @@
 ## roll, slight ground sink. All constants — deterministic, no RNG.
 ##
 ## WHITE-TREE LESSON: never apply material_overlay tints to this mesh — it has
-## no vertex colors (games/boreal/README.md handover notes). The FBX materials
+## no vertex colors (README handover notes). The FBX materials
 ## (red/white livery) render as-is.
 class_name WreckVisuals
 

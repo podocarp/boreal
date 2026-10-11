@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproduce games/boreal/levels/gen_001 from tools/terrain-gen (fixed seed —
+# Reproduce levels/gen_001 from tools/terrain-gen (fixed seed —
 # the baked files are the determinism boundary; do NOT regenerate casually).
 # Run from anywhere; paths are resolved relative to this script.
 #
@@ -9,8 +9,8 @@
 #   7/999: water too dominant near spawn (606/1367 water cells in the 80 m
 #         ring); 2024: only 73 viable cells.
 set -euo pipefail
-HERE=$(cd "$(dirname "$0")/../../.." && pwd)   # repo root (games/boreal/tools -> root)
-OUT="$HERE/games/boreal/levels/gen_001/"
+HERE=$(cd "$(dirname "$0")/.." && pwd)   # repo root (tools -> root)
+OUT="$HERE/levels/gen_001/"
 godot --headless --path "$HERE/tools/terrain-gen" --script res://terrain_gen.gd -- \
   --seed 1337 --size 256 --octaves 5 --particles 12000 --thermal 3 --cell 2.0 \
   --out "$OUT"

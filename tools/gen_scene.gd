@@ -1,5 +1,5 @@
 extends SceneTree
-## Code-author scenes/main.tscn (FACTORY rule 1: .tscn is generated output).
+## Code-author scenes/main.tscn (rule: .tscn is generated output, never hand-edited).
 ## Run: godot --headless --path . --script res://tools/gen_scene.gd
 
 func _init():

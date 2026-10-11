@@ -10,7 +10,7 @@
 # serves plain files without COOP/COEP cross-origin headers, which threaded
 # Godot web builds require. No-threads is the itch-compatible choice.
 set -euo pipefail
-cd "$(dirname "$0")/.."   # games/boreal
+cd "$(dirname "$0")/.."   # repo root
 PROJ="$PWD"
 VER="${VER:-0.1.0}"
 GODOT="${GODOT:-godot}"

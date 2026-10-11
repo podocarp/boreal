@@ -1,5 +1,5 @@
 ## Survival HUD: needs bars, core temp, day/clock, inventory, toasts.
-## Built in code (FACTORY rule 1). Reads GameLoop state each frame; toast
+## Built in code (rule: scenes are code-authored). Reads GameLoop state each frame; toast
 ## expiry uses tick counts (sim-driven), never wall-clock.
 class_name SurvivalHud
 extends Control
