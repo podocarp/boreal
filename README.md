@@ -135,8 +135,20 @@ godot --headless --path . --script res://tools/gen_scene.gd  # regen main.tscn
 ```
 
 ## Play the web build
+**Hosted demo:** <https://podocarp.github.io/boreal/> (served from the
+`gh-pages` branch; rebuild + `git push -f` the branch from `dist/web/` to
+update). Release zip: <https://github.com/podocarp/boreal/releases/tag/v0.1.0>.
+
+> **Don't open `index.html` via `file://`** — you'll get the Godot splash then
+> "NetworkError when attempting to fetch resource": the engine `fetch()`es the
+> wasm/pck and browsers block that on `file://`. Serve over http instead:
+> `unzip boreal-web-0.1.0.zip -d boreal && cd boreal && python3 -m http.server`
+> → http://localhost:8000
+
 The itch-ready artifact is `dist/boreal-web-<ver>.zip` (index.html at zip
-root — itch.io's requirement). Rebuild it with:
+root — itch.io's requirement). The web export excludes `levels/` (the baked
+generated level is desktop-only via `LEVEL=generated`), keeping the pck at
+~17 MB. Rebuild it with:
 ```bash
 export PATH=$HOME/.local/bin:$PATH          # godot lives in ~/.local/bin
 bash tools/export.sh                        # -> dist/web/ + dist/boreal-web-0.1.0.zip
