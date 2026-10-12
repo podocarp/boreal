@@ -71,6 +71,15 @@ with sync_playwright() as p:
         return out;
     }""")
     page.screenshot(path="/tmp/boreal_web_smoke.png")
+    # Alive check (web 0.1.0 regression): click through the title (sim paused
+    # on menu = static canvas), then the water shader animates with sim time,
+    # so a LIVE engine's canvas changes between frames. A dead engine (tree
+    # quit, frozen menu) renders an identical frame forever.
+    page.mouse.click(640, 360)
+    page.wait_for_timeout(1000)
+    s1 = page.screenshot()
+    page.wait_for_timeout(1500)
+    info["animating"] = page.screenshot() != s1
     ctx.close()
     srv.shutdown()
 
@@ -79,7 +88,7 @@ print("booted (splash removed):", booted)
 print("canvas:", json.dumps(info))
 print("page errors:", json.dumps(errors[:10]) if errors else "none")
 ok = (booted and info["canvas"] and info["w"] > 0 and info["gl"] != "none"
-      and info["distinct"] > 3
+      and info["distinct"] > 3 and info.get("animating")
       and all(s == 200 for s, _ in reqs))
 print("SMOKE:", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

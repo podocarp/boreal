@@ -324,11 +324,19 @@ func _process(_d: float) -> void:
 			_fire_light.visible = stage > 0
 			_fire_light.light_energy = 0.5 + 0.3 * float(stage)
 			_flame.scale = Vector3.ONE * lerpf(0.5, 1.1, float(stage) / 4.0)
+	# Screenshot-shot mode ONLY: when SHOT_OUT is unset this must do nothing.
+	# (Bug, web release 0.1.0: quit() ran unconditionally, so live play killed
+	# its own scene tree on frame 2 — frozen menu, dead input, wasm shell
+	# spinning on a dead engine. Headless screenshot tests always set SHOT_OUT,
+	# so only interactive play exposed it.)
 	if _shot_saved:
+		return
+	var out := OS.get_environment("SHOT_OUT")
+	if out == "":
 		return
 	_shot_saved = true
 	await RenderingServer.frame_post_draw
-	var out := OS.get_environment("SHOT_OUT")
-	if out != "":
-		get_viewport().get_texture().get_image().save_png(out)
+	get_viewport().get_texture().get_image().save_png(out)
 	get_tree().quit.call_deferred()
+
+

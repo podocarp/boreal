@@ -17,6 +17,7 @@ var sub: Label
 var body: Label
 var hint: Label
 var _bg: ColorRect
+var _box: VBoxContainer
 
 const CONTROLS := """WASD move · SHIFT sprint · mouse look
 E interact / collect snare · F feed fire · R melt snow · C cook
@@ -42,7 +43,8 @@ func build() -> void:
 	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
 	_bg.gui_input.connect(_on_bg_input)
 	add_child(_bg)
-	var box := VBoxContainer.new()
+	_box = VBoxContainer.new()
+	var box := _box
 	box.name = "Box"
 	box.set_anchors_preset(Control.PRESET_FULL_RECT)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -98,11 +100,14 @@ func hide_all() -> void:
 	mode = Mode.NONE
 	_bg.visible = false
 	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_box.visible = false  # labels live here; without this the title text
+	                      # stays on screen forever after start (web 0.1.0 bug)
 
 
 func _show() -> void:
 	_bg.visible = true
 	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	_box.visible = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
