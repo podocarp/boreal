@@ -24,6 +24,34 @@ var _toast: Label
 var _weight: Label
 var _toast_left := 0
 var _seen_toasts := 0
+var _ring: WorkRing  # center-screen work-progress ring (playtest 2026-10-12)
+
+
+## Thin self-filling circle at screen center while a work task runs; a static
+## dot crosshair otherwise. Draws in _draw, redraws on value change.
+class WorkRing extends Control:
+	var progress := -1.0  # <0 = no task -> dot only
+
+	func _ready() -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		set_anchors_preset(Control.PRESET_FULL_RECT)
+
+	func _draw() -> void:
+		# HUD root is a bare Control under a Node3D (size 0) — use the
+		# viewport rect, not our own size, for screen center.
+		var c := get_viewport_rect().size * 0.5
+		# dark core + light halo: a white dot alone vanishes on snow
+		if progress < 0.0:
+			draw_circle(c, 3.0, Color(1, 1, 1, 0.5))
+			draw_circle(c, 1.6, Color(0.05, 0.07, 0.10, 0.9))
+			return
+		draw_circle(c, 3.0, Color(1, 1, 1, 0.6))
+		draw_circle(c, 1.6, Color(0.05, 0.07, 0.10, 0.95))
+		var r := 14.0
+		draw_arc(c, r, 0.0, TAU, 40, Color(0.05, 0.07, 0.10, 0.5), 3.0)
+		# start at 12 o'clock, fill clockwise
+		draw_arc(c, r, -PI * 0.5, -PI * 0.5 + TAU * clampf(progress, 0.0, 1.0),
+			40, Color(0.95, 0.85, 0.45, 0.95), 3.0)
 
 
 func _ready() -> void:
@@ -82,17 +110,24 @@ func _ready() -> void:
 	add_child(_clock)
 	_inv = Label.new()
 	_inv.name = "Inventory"
-	_inv.position = Vector2(430, 12)
+	# anchored top-right (viewport is 1280x720 design px)
+	_inv.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_inv.offset_left = -210.0
+	_inv.offset_top = 12.0
+	_inv.offset_right = -12.0
+	_inv.offset_bottom = 212.0
 	_inv.add_theme_font_size_override("font_size", 13)
 	_inv.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_inv.size = Vector2(198, 200)
 	_inv.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_inv.add_theme_constant_override("outline_size", 5)
 	add_child(_inv)
 	_prompt = Label.new()
 	_prompt.name = "Prompt"
-	_prompt.position = Vector2(180, 300)
-	_prompt.size = Vector2(280, 20)
+	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_prompt.offset_left = -200.0
+	_prompt.offset_top = -74.0
+	_prompt.offset_right = 200.0
+	_prompt.offset_bottom = -50.0
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.add_theme_font_size_override("font_size", 17)
 	_prompt.add_theme_color_override("font_color", Color(1, 1, 0.9))
@@ -109,13 +144,19 @@ func _ready() -> void:
 	add_child(_injury)
 	_toast = Label.new()
 	_toast.name = "Toast"
-	_toast.position = Vector2(80, 326)
-	_toast.size = Vector2(480, 24)
+	_toast.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_toast.offset_left = -240.0
+	_toast.offset_top = -42.0
+	_toast.offset_right = 240.0
+	_toast.offset_bottom = -14.0
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_toast.add_theme_font_size_override("font_size", 17)
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_toast.add_theme_constant_override("outline_size", 6)
 	add_child(_toast)
+	_ring = WorkRing.new()
+	_ring.name = "WorkRing"
+	add_child(_ring)
 
 
 ## Context prompt, mirroring TS contextActions tiers 1–2 (spot verbs win over
@@ -160,6 +201,15 @@ func _process(_d: float) -> void:
 	_inv.text = "\n".join(lines)
 	var tgt: Variant = Actions.current_target(w) if not n.sleeping else null
 	_prompt.text = _context_prompt(w, tgt) if not n.sleeping else ""
+	# work-progress ring: fills while a task runs (moving cancels the task in
+	# Actions.tick_work, so the ring disappears with it)
+	if _ring != null:
+		var prog := -1.0
+		if w.task != null:
+			prog = 1.0 - float(w.task.remaining) / maxf(float(w.task.total), 1e-6)
+		if not is_equal_approx(prog, _ring.progress):
+			_ring.progress = prog
+			_ring.queue_redraw()
 	# injury/infection status line (only when wounded)
 	if _injury != null:
 		if w.injuries.is_empty():

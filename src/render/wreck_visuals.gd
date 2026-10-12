@@ -48,6 +48,23 @@ static func build(site: Vector3, h: float, toward: Vector3) -> Node3D:
 	model.scale = Vector3.ONE * s
 	model.position = Vector3(-box.get_center().x, -box.position.y, -box.get_center().z) * s
 	wrapper.add_child(model)
+	# Solid hull so the player can't walk through the fuselage (playtest
+	# 2026-10-12). Box from the normalized AABB, child of the wrapper so it
+	# rides the crash pose. Layer 1 = world solids the capsule collides with.
+	var body := StaticBody3D.new()
+	body.name = "WreckCollision"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var cs := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	# Fuselage block only — NOT the full AABB: the 8.5 m wingspan box would
+	# wall off the scavenge interactable at the wreck center (INTERACT_RADIUS).
+	shape.size = Vector3(2.6, maxf(box.size.y * s, 1.6), 2.6)
+	# model is centered x/z and floored at y=0 in wrapper space
+	cs.position = Vector3(0.0, shape.size.y * 0.5, 0.0)
+	cs.shape = shape
+	body.add_child(cs)
+	wrapper.add_child(body)
 	# crash pose: nose toward camp, then pitch/roll, then sink into the snow
 	var yaw := atan2(toward.x - site.x, toward.z - site.z) + deg_to_rad(YAW)
 	wrapper.transform = Transform3D(

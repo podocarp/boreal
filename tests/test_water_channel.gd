@@ -102,8 +102,14 @@ func _camp_clear_of_ribbon() -> void:
 				and absf(v.z - c.z) <= CampSite.FOOTPRINT:
 			_fail("water ribbon crosses camp footprint at z=%.1f (x %.2f..%.2f, camp x=%.2f)"
 				% [v.z, lo, hi, c.x])
-	if WaterRender.channel_taper(c.z) > 0.0:
-		_fail("channel_taper at camp z=%.1f is %.3f, expected 0" % [c.z, WaterRender.channel_taper(c.z)])
+	# (2026-10-12: was `channel_taper(c.z) == 0` — a proxy that only held
+	# while the camp sat near the lake where the channel closes. Camp now
+	# sits on the mid-stream bench; the ribbon-crossing check above is the
+	# real invariant, plus a stream-centerline clearance here.)
+	var sd := absf(c.x - Terrain.streamX(c.z))
+	if sd < WaterRender.HALF_W + CampSite.FOOTPRINT:
+		_fail("camp x=%.1f too close to stream x=%.1f at z=%.1f (dist %.1f)" % [
+			c.x, Terrain.streamX(c.z), c.z, sd])
 
 
 ## The ribbon must terminate cleanly: taper hits 0 at the lake end AND at the

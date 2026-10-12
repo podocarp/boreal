@@ -3,7 +3,11 @@
 class_name Terrain
 
 const LAKE := {"cx": 0.0, "cz": -150.0, "rx": 150.0, "rz": 90.0}
-const CRASH := {"x": -20.0, "z": -62.0}
+const CRASH := {"x": 12.0, "z": -28.0}  # flat forest bench, 31 m from the
+# stream (playtest 2026-10-12: the old lake-rim spot (-20,-62) had 5.4 m of
+# relief across the wreck footprint — plane visibly tilted on a slope. A
+# 17 m-from-water site was tried first and made the game too safe: naive bot
+# survived 11/12 seeds; 31 m keeps the water carry a real cost.)
 
 
 ## Stream meanders x = f(z) from the ridge down to the lake.

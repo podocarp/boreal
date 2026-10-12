@@ -250,10 +250,10 @@ func _frozen_terrain_collision() -> StaticBody3D:
 	# SIZE meters. The shape is centered on the body origin -> place at CRASH.
 	body.scale = Vector3(SIZE / float(N - 1), 1.0, SIZE / float(N - 1))
 	body.position = Vector3(cx, 0.0, cz)
-	# Layer 2 = camera-only. The sim pins the player to heightAt every tick;
-	# a layer-1 collider would let move_and_slide fight the sim on slopes.
-	# The spring-arm camera ray masks layer 2 (see PlayerRig.make).
-	body.collision_layer = 2
+	# Layer 1|2: floor for the player capsule (move_and_slide, real gravity —
+	# playtest 2026-10-12: gravity 0 + y-pinning felt like floating through
+	# the world) AND camera-retract surface for the spring arm (mask 2).
+	body.collision_layer = 1 | 2
 	body.collision_mask = 0
 	return body
 
@@ -288,6 +288,7 @@ func _make_scatter() -> Node3D:
 			continue
 		root.add_child(ScatterRender.make_multimesh(mesh, xforms,
 			path.get_file().get_basename()))
+	root.add_child(ScatterRender.collider_body(instances))
 	return root
 
 

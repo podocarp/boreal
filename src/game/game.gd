@@ -53,19 +53,19 @@ func step_tick() -> void:
 	ticked.emit(tick_count)
 
 
-## Snap the sim player to the 3D rig (terrain-follow; mover runs with gravity 0).
-## Also mirrors the stamina ladder onto the mover: exhausted = slower walk,
-## sprint key does nothing below the lockout (the sim logs the toast).
+## Mirror the 3D rig into the sim (playtest 2026-10-12: the mover runs with
+## real gravity on the terrain collider; the sim no longer pins y — it just
+## records the rig's physics height). Also mirrors the stamina ladder onto the
+## mover: exhausted = slower walk, sprint key does nothing below the lockout
+## (the sim logs the toast).
 func _sync_player() -> void:
 	if player == null:
 		return
 	var p := player.global_position
 	world.player.x = p.x
 	world.player.z = p.z
-	world.player.y = terrain.heightAt(p.x, p.z)
+	world.player.y = terrain.heightAt(p.x, p.z)  # sim-side ground reference
 	world.player.moving = Vector2(player.velocity.x, player.velocity.z).length() > 0.15
-	player.global_position.y = world.player.y + 0.85  # capsule center above feet
-	player.velocity.y = 0.0
 	var f := Needs.moveSpeedFactor(world.needs)
 	player.walk_speed = Config.PLAYER.WALK_SPEED_MPS * f
 	player.sprint_speed = (Config.PLAYER.RUN_SPEED_MPS * f) \

@@ -51,6 +51,50 @@ static func build_instances(props: Array, center := Vector2.INF,
 	return out
 
 
+## Trunk/rock collision proxies for scattered props (playtest 2026-10-12:
+## props were MultiMesh visuals only — the player walked through every tree).
+## One StaticBody3D with a cylinder per instance; thin trunk radius so the
+## 2.6 m interact radius around the prop still works. Layers 1|2: solid for
+## the player capsule AND camera-retract surface for the spring arm.
+const COLLIDER_DIMS := {  # kind -> [trunk radius m, proxy height m]
+	"spruce": [0.35, 6.0],
+	"birch": [0.30, 5.0],
+	"rock": [1.00, 1.2],
+}
+
+
+static func kind_for_path(path: String) -> String:
+	for kind in MODELS:
+		if path in (MODELS[kind] as Array):
+			return kind
+	return ""
+
+
+static func collider_body(instances: Dictionary) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "PropColliders"
+	body.collision_layer = 1 | 2
+	body.collision_mask = 0
+	for path in instances:
+		var kind := kind_for_path(path)
+		if kind == "" or not COLLIDER_DIMS.has(kind):
+			continue
+		var dims: Array = COLLIDER_DIMS[kind]
+		for xf in (instances[path] as Array):
+			var t: Transform3D = xf
+			var s: float = t.basis.get_scale().y
+			var cs := CollisionShape3D.new()
+			var shape := CylinderShape3D.new()
+			shape.radius = dims[0] * maxf(s, 0.4)
+			shape.height = dims[1] * maxf(s, 0.4)
+			cs.shape = shape
+			# prop origin sits on the ground -> proxy center at half height.
+			# Body is identity at the world origin, so local == global here.
+			cs.position = t.origin + Vector3(0.0, shape.height * 0.5, 0.0)
+			body.add_child(cs)
+	return body
+
+
 ## One MultiMeshInstance3D per model path (mesh may be a PackedScene or Mesh).
 static func make_multimesh(mesh: Resource, xforms: Array,
 		name_: String, mat_override: Material = null) -> MultiMeshInstance3D:

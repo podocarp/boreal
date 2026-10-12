@@ -12,9 +12,14 @@ static func make(spawn := Vector3.INF, hm = null) -> CharacterBody3D:
 	p.name = "Player"
 	p.walk_speed = Config.PLAYER.WALK_SPEED_MPS
 	p.sprint_speed = Config.PLAYER.RUN_SPEED_MPS
-	p.gravity = 0.0
+	p.gravity = 9.8  # real gravity; terrain collider is the floor (playtest 2026-10-12)
 	var sx := Terrain.CRASH.x if spawn == Vector3.INF else spawn.x
 	var sz := Terrain.CRASH.z if spawn == Vector3.INF else spawn.z
+	# step ~4 m off the fuselage collider (it now has a StaticBody; spawning
+	# at the exact crash center put the capsule inside the wreck — playtest
+	# 2026-10-12 "spawn clips through the plane")
+	sx += 2.5
+	sz += 3.5
 	var sy: float = Terrain.heightAt(sx, sz) if hm == null \
 		else hm.heightAt(sx, sz)
 	p.position = Vector3(sx, sy + 0.85, sz)

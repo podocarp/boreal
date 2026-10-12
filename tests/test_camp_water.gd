@@ -108,8 +108,15 @@ func _water_follows_stream() -> void:
 	if not WaterRender.water_y(z0) < bank:
 		_fail("water surface %.2f not below bank %.2f" % [WaterRender.water_y(z0), bank])
 	# the lake-approach rows (where the camp sits) must be fully clipped
-	if WaterRender.channel_taper(c.z) > 0.0:
-		_fail("channel_taper at camp z=%.1f is %.3f, expected 0" % [c.z, WaterRender.channel_taper(c.z)])
+	# camp must be clear of the open channel: at least half-width + footprint
+	# from the stream centerline. (Was `channel_taper(c.z) == 0`, a proxy that
+	# only held while the camp sat near the lake where the channel closes;
+	# 2026-10-12 CRASH move put camp on a forest bench clear of the
+	# channel — the ribbon-crossing check above is the real invariant.)
+	var sd := absf(c.x - Terrain.streamX(c.z))
+	if sd < WaterRender.HALF_W + CampSite.FOOTPRINT:
+		_fail("camp x=%.1f too close to stream x=%.1f at z=%.1f (dist %.1f)" % [
+			c.x, Terrain.streamX(c.z), c.z, sd])
 
 
 func _check(cond: bool, msg: String) -> void:
