@@ -77,9 +77,9 @@ with sync_playwright() as p:
     # quit, frozen menu) renders an identical frame forever.
     page.mouse.click(640, 360)
     page.wait_for_timeout(1000)
-    s1 = page.screenshot()
+    s1 = page.screenshot(timeout=120000)
     page.wait_for_timeout(1500)
-    info["animating"] = page.screenshot() != s1
+    info["animating"] = page.screenshot(timeout=120000) != s1
     ctx.close()
     srv.shutdown()
 

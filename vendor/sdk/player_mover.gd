@@ -35,7 +35,12 @@ func _physics_process(delta: float) -> void:
 func _read_input() -> Vector2:
 	if test_input != Vector2.ZERO:
 		return test_input
-	return Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	# get_vector returns NEGATIVE y for the forward action (negative_y slot);
+	# this mover's contract (and test_input) is y=forward positive — negate.
+	# (Web 0.1.0 bug: W walked backwards; tests drive test_input so they
+	# never exercised the live-input sign.)
+	var v := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	return Vector2(v.x, -v.y)
 
 ## Horizontal world-space wish vector from input, rotated by camera yaw.
 ## Yaw-only basis: camera pitch must not change ground speed.

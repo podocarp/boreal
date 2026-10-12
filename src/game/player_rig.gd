@@ -39,6 +39,10 @@ static func make(spawn := Vector3.INF, hm = null) -> CharacterBody3D:
 	arm.target_path = NodePath("..")
 	arm.pitch = -0.12
 	arm.yaw = -2.8  # face the starter grove (CRASH + (10, 28)) at spawn
+	# Terrain colliders live on layer 2 (camera-only); mask 2 retracts the arm
+	# on hills instead of clipping through them, and skips the player capsule
+	# (layer 1) so the arm never self-collides.
+	arm.collision_mask = 2
 	arm.apply_look(0.0, 0.0)
 	p.add_child(arm)
 	var cam := Camera3D.new()

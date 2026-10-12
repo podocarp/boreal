@@ -32,7 +32,7 @@ func _ready() -> void:
 	var panel := Panel.new()
 	panel.name = "NeedsPanel"
 	panel.position = Vector2(6, 6)
-	panel.size = Vector2(300, 132)
+	panel.size = Vector2(340, 168)
 	var pmat := StyleBoxFlat.new()
 	pmat.bg_color = Color(0.05, 0.07, 0.10, 0.62)
 	pmat.set_corner_radius_all(4)
@@ -47,7 +47,7 @@ func _ready() -> void:
 		left.add_child(row)
 		var lbl := Label.new()
 		lbl.text = n.to_upper()
-		lbl.add_theme_font_size_override("font_size", 10)
+		lbl.add_theme_font_size_override("font_size", 13)
 		lbl.custom_minimum_size = Vector2(74, 0)
 		row.add_child(lbl)
 		var bar := ProgressBar.new()
@@ -68,22 +68,22 @@ func _ready() -> void:
 		if n == "hunger":
 			_weight = Label.new()
 			_weight.name = "Weight"
-			_weight.add_theme_font_size_override("font_size", 10)
+			_weight.add_theme_font_size_override("font_size", 12)
 			row.add_child(_weight)
 		_bars[n] = bar
 	_temp = Label.new()
 	_temp.name = "CoreTemp"
-	_temp.add_theme_font_size_override("font_size", 12)
+	_temp.add_theme_font_size_override("font_size", 15)
 	left.add_child(_temp)
 	_clock = Label.new()
 	_clock.name = "Clock"
 	_clock.position = Vector2(12, 118)
-	_clock.add_theme_font_size_override("font_size", 14)
+	_clock.add_theme_font_size_override("font_size", 18)
 	add_child(_clock)
 	_inv = Label.new()
 	_inv.name = "Inventory"
 	_inv.position = Vector2(430, 12)
-	_inv.add_theme_font_size_override("font_size", 10)
+	_inv.add_theme_font_size_override("font_size", 13)
 	_inv.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_inv.size = Vector2(198, 200)
 	_inv.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
@@ -94,7 +94,7 @@ func _ready() -> void:
 	_prompt.position = Vector2(180, 300)
 	_prompt.size = Vector2(280, 20)
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt.add_theme_font_size_override("font_size", 12)
+	_prompt.add_theme_font_size_override("font_size", 17)
 	_prompt.add_theme_color_override("font_color", Color(1, 1, 0.9))
 	_prompt.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_prompt.add_theme_constant_override("outline_size", 6)
@@ -102,7 +102,7 @@ func _ready() -> void:
 	_injury = Label.new()
 	_injury.name = "Injury"
 	_injury.position = Vector2(6, 146)
-	_injury.add_theme_font_size_override("font_size", 10)
+	_injury.add_theme_font_size_override("font_size", 14)
 	_injury.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 	_injury.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_injury.add_theme_constant_override("outline_size", 5)
@@ -112,7 +112,7 @@ func _ready() -> void:
 	_toast.position = Vector2(80, 326)
 	_toast.size = Vector2(480, 24)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast.add_theme_font_size_override("font_size", 12)
+	_toast.add_theme_font_size_override("font_size", 17)
 	_toast.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_toast.add_theme_constant_override("outline_size", 6)
 	add_child(_toast)

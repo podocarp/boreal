@@ -40,6 +40,10 @@ static func collision_body(hm: TerrainHM) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "TerrainCollision"
 	body.scale = Vector3(hm.cell, 1.0, hm.cell)
+	# Camera-only layer (see main.gd._frozen_terrain_collision): the sim pins
+	# the player to heightAt; a layer-1 collider would fight move_and_slide.
+	body.collision_layer = 2
+	body.collision_mask = 0
 	var cs := CollisionShape3D.new()
 	cs.shape = load(LEVEL_DIR + "terrain_collision.tres")
 	body.add_child(cs)

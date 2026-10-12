@@ -47,9 +47,9 @@ func _state(over := {}) -> Dictionary:
 ## (a) pure + deterministic: identical inputs -> identical outputs.
 func _test_determinism() -> void:
 	var a := AudioMap.map_state(_state({"fire_warmth": 0.6, "wind_kmh": 30.0,
-		"moving": true, "speed": 1.4}))
+		"moving": true, "speed": 2.6}))
 	var b := AudioMap.map_state(_state({"fire_warmth": 0.6, "wind_kmh": 30.0,
-		"moving": true, "speed": 1.4}))
+		"moving": true, "speed": 2.6}))
 	if str(a) != str(b):
 		_fail("mapping not deterministic: %s vs %s" % [str(a), str(b)])
 	# and it must actually be doing something
@@ -81,8 +81,8 @@ func _test_crafted_states() -> void:
 	if loops.has(AudioMap.LOOP_WIND):
 		_fail("calm 6 km/h mapped audible wind: %s" % str(loops))
 	# footstep cadence: running faster than walking, stopped -> silent
-	var walk := AudioMap.map_state(_state({"moving": true, "speed": 1.4}))
-	var run := AudioMap.map_state(_state({"moving": true, "speed": 3.2}))
+	var walk := AudioMap.map_state(_state({"moving": true, "speed": 2.6}))
+	var run := AudioMap.map_state(_state({"moving": true, "speed": 5.0}))
 	var idle := AudioMap.map_state(_state())
 	if not (float(run["step_interval"]) < float(walk["step_interval"])):
 		_fail("run cadence %.3f not faster than walk %.3f" \
@@ -92,13 +92,13 @@ func _test_crafted_states() -> void:
 	# surface changes loudness: lake ice > forest
 	if not (float(run["step_vol"]) > 0.0):
 		_fail("run step_vol zero")
-	var lake := AudioMap.map_state(_state({"moving": true, "speed": 1.4, "zone": "lake"}))
-	var forest := AudioMap.map_state(_state({"moving": true, "speed": 1.4, "zone": "forest"}))
+	var lake := AudioMap.map_state(_state({"moving": true, "speed": 2.6, "zone": "lake"}))
+	var forest := AudioMap.map_state(_state({"moving": true, "speed": 2.6, "zone": "forest"}))
 	if not (float(lake["step_vol"]) > float(forest["step_vol"])):
 		_fail("lake ice not louder than forest: %s vs %s" % [lake["step_vol"], forest["step_vol"]])
 	# outside PLAYING -> total silence (loops off, no steps)
 	var menu := AudioMap.map_state(_state({"fire_warmth": 1.0, "wind_kmh": 60.0,
-		"moving": true, "speed": 3.2, "game_state": 0}))
+		"moving": true, "speed": 5.0, "game_state": 0}))
 	if not (menu["loops"] as Dictionary).is_empty() or float(menu["step_interval"]) != 0.0:
 		_fail("MENU state mapped sound: %s" % str(menu))
 

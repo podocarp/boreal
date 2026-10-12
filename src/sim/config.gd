@@ -21,8 +21,11 @@ const WORLD := {
 }
 
 const PLAYER := {
-	"WALK_SPEED_MPS": 1.4,
-	"RUN_SPEED_MPS": 3.2,
+	# DIVERGENCE from TS (playtest 2026-10-12): TS 1.4/3.2 m/s felt frozen in
+	# play ("unreasonably slow" — 400 m map, 5-minute crossings). Brisk
+	# winter-traverse pace; balance harness re-run after the change.
+	"WALK_SPEED_MPS": 2.6,
+	"RUN_SPEED_MPS": 5.0,
 	"EYE_HEIGHT_M": 1.65,
 	"RADIUS_M": 0.35,
 	"TURN_RATE_RADPS": 10.0,

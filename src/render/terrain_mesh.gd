@@ -75,5 +75,9 @@ static func _material() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.roughness = 0.95
+	# Double-sided: the grid only has up-facing winding, so from any angle
+	# below a slope crest (or outside the 400 m grid edge) a single-sided
+	# mesh is see-through — the hill looked like a hole (web 0.1.0 report).
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	# no normals in the arrays => engine derives per-face normals (flat shading)
 	return m

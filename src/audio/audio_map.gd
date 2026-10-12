@@ -39,7 +39,9 @@ const FOOTSTEP_VARIANTS := 5
 ## Tuning (audible ranges, not sim values — the sim is never read back).
 const WIND_FLOOR_KMH := 12.0   # below this the wind bed is inaudible
 const WIND_FULL_KMH := 38.0    # windKmh at/above this = full wind volume
-const STEP_RUN_MPS := 2.2      # cadence floor: interval at/above this speed
+const STEP_RUN_MPS := 3.8      # cadence floor: interval at/above this speed
+                               # (retuned with the 2026-10-12 speed buff:
+                               # walk 2.6 must stay walk-cadence, run 5.0 run)
 const STEP_IDLE_MPS := 0.3     # cadence ceiling at walking start
 const STEP_INTERVAL_RUN := 0.28
 const STEP_INTERVAL_WALK := 0.52

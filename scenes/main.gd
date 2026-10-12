@@ -43,6 +43,8 @@ func _ready() -> void:
 	add_child(terrain)
 	if _hm != null:
 		add_child(GenLevel.collision_body(_hm))
+	else:
+		add_child(_frozen_terrain_collision())
 	add_child(_make_scatter())
 	_add_water()
 	_add_camp()
@@ -214,6 +216,46 @@ func _add_environment() -> Environment:
 	we.environment = env
 	add_child(we)
 	return env
+
+
+## Heightfield collider for the frozen level (the generated level bakes its
+## own via GenLevel.collision_body). The sim pins the player to heightAt, so
+## this exists for the spring-arm camera ray: without it the camera clips
+## straight through hills (web 0.1.0 "see right through the hill" report —
+## combined with the single-sided mesh, hills looked like holes).
+func _frozen_terrain_collision() -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "TerrainCollision"
+	var cs := CollisionShape3D.new()
+	var shape := HeightMapShape3D.new()
+	const N := 128
+	const SIZE := 400.0
+	# map_data is row-major over map_width x map_height (Godot 4.7: packed
+	# floats, not an Image). Row index = z, column = x, matching the mesh grid.
+	var data := PackedFloat32Array()
+	data.resize(N * N)
+	shape.map_width = N
+	shape.map_height = N
+	var cx := Terrain.CRASH.x
+	var cz := Terrain.CRASH.z
+	for j in N:
+		var z := cz - SIZE * 0.5 + SIZE * float(j) / float(N - 1)
+		for i in N:
+			var x := cx - SIZE * 0.5 + SIZE * float(i) / float(N - 1)
+			data[j * N + i] = Terrain.heightAt(x, z)
+	shape.map_data = data
+	cs.shape = shape
+	body.add_child(cs)
+	# HeightMapShape cells are 1 m; scale to SIZE/(N-1) so the shape spans
+	# SIZE meters. The shape is centered on the body origin -> place at CRASH.
+	body.scale = Vector3(SIZE / float(N - 1), 1.0, SIZE / float(N - 1))
+	body.position = Vector3(cx, 0.0, cz)
+	# Layer 2 = camera-only. The sim pins the player to heightAt every tick;
+	# a layer-1 collider would let move_and_slide fight the sim on slopes.
+	# The spring-arm camera ray masks layer 2 (see PlayerRig.make).
+	body.collision_layer = 2
+	body.collision_mask = 0
+	return body
 
 
 func _add_sun() -> DirectionalLight3D:
