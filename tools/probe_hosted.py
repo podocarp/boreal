@@ -15,8 +15,16 @@ with sync_playwright() as p:
     page.wait_for_selector("canvas", timeout=120000)
     page.wait_for_function("() => { const s = document.getElementById('status'); return !s || s.style.display === 'none'; }", timeout=240000)
     page.wait_for_timeout(5000)
-    menu = page.screenshot(timeout=120000)
-    # staged build: the loading overlay swallows early clicks — retry
+    # staged build + title fade-in: baseline AFTER the fade settles, else the
+    # retry loop breaks on fade pixels while the title is still up.
+    prev = page.screenshot(timeout=120000)
+    for _ in range(4):
+        page.wait_for_timeout(1500)
+        cur = page.screenshot(timeout=120000)
+        if cur == prev:  # fade complete: menu is static
+            break
+        prev = cur
+    menu = prev
     started = menu
     for _ in range(6):
         page.mouse.click(640, 360)
@@ -25,6 +33,8 @@ with sync_playwright() as p:
         if menu != started:
             break
     print("title dismissed on click:", menu != started)
+    page.wait_for_timeout(2000)  # let any transition settle before walking
+    started = page.screenshot(timeout=120000)
     page.keyboard.down("w"); page.wait_for_timeout(3000); page.keyboard.up("w")
     walked = page.screenshot(timeout=120000)
     print("walking moves view:", started != walked)
