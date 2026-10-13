@@ -33,7 +33,18 @@ with sync_playwright() as pw:
     page.wait_for_timeout(12000)
     before = page.evaluate("window.__longtasks.length")
     t0 = page.evaluate("performance.now()")
-    page.mouse.click(640, 360)          # dismiss title -> PLAYING
+    # staged build: retry until the title actually dismisses (canvas starts
+    # animating), so we measure the PLAYING-start spike, not a swallowed click
+    prev = page.screenshot(timeout=120000)
+    for _ in range(8):
+        page.mouse.click(640, 360)
+        page.wait_for_timeout(1200)
+        cur = page.screenshot(timeout=120000)
+        if cur != prev:
+            break
+        prev = cur
+    t0 = page.evaluate("performance.now()")   # measure from the real start
+    before = page.evaluate("window.__longtasks.length")
     page.wait_for_timeout(6000)         # let the spike (if any) land
     lts = page.evaluate("window.__longtasks")
     after = [t for t in lts[before:] if t["at"] >= t0 - 500]

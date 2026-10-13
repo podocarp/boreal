@@ -75,11 +75,17 @@ with sync_playwright() as p:
     # on menu = static canvas), then the water shader animates with sim time,
     # so a LIVE engine's canvas changes between frames. A dead engine (tree
     # quit, frozen menu) renders an identical frame forever.
-    page.mouse.click(640, 360)
-    page.wait_for_timeout(1000)
-    s1 = page.screenshot(timeout=120000)
-    page.wait_for_timeout(1500)
-    info["animating"] = page.screenshot(timeout=120000) != s1
+    # Staged build (2026-10-12): the loading overlay swallows early clicks,
+    # so retry until the canvas animates (title dismissed).
+    for attempt in range(6):
+        page.mouse.click(640, 360)
+        page.wait_for_timeout(1500)
+        s1 = page.screenshot(timeout=120000)
+        page.wait_for_timeout(1500)
+        info["animating"] = page.screenshot(timeout=120000) != s1
+        if info["animating"]:
+            info["click_attempts"] = attempt + 1
+            break
     ctx.close()
     srv.shutdown()
 

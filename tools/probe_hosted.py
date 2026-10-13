@@ -16,9 +16,14 @@ with sync_playwright() as p:
     page.wait_for_function("() => { const s = document.getElementById('status'); return !s || s.style.display === 'none'; }", timeout=240000)
     page.wait_for_timeout(5000)
     menu = page.screenshot(timeout=120000)
-    page.mouse.click(640, 360)
-    page.wait_for_timeout(1500)
-    started = page.screenshot(timeout=120000)
+    # staged build: the loading overlay swallows early clicks — retry
+    started = menu
+    for _ in range(6):
+        page.mouse.click(640, 360)
+        page.wait_for_timeout(1500)
+        started = page.screenshot(timeout=120000)
+        if menu != started:
+            break
     print("title dismissed on click:", menu != started)
     page.keyboard.down("w"); page.wait_for_timeout(3000); page.keyboard.up("w")
     walked = page.screenshot(timeout=120000)
