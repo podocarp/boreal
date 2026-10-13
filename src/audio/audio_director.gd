@@ -38,6 +38,13 @@ func _ready() -> void:
 		_setup_buses()
 		_fire_player = _make_loop_player(AudioMap.LOOP_FIRE, "Ambience")
 		_wind_player = _make_loop_player(AudioMap.LOOP_WIND, "Ambience")
+		# Pre-decode the beds behind the title screen (playtest 2026-10-12:
+		# first play() on web decodes the OGG on the main thread — a visible
+		# lag spike the moment PLAYING starts). Silent at -80 dB; the tick
+		# ramp takes over the volume. Beds keep playing; _ramp fades them.
+		for p in [_fire_player, _wind_player]:
+			if p != null and p.stream != null:
+				p.play()
 		for i in POOL_SIZE:
 			var p := AudioStreamPlayer.new()
 			p.bus = "SFX"

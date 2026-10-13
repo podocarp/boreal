@@ -28,12 +28,71 @@ var _hm = null  # TerrainHM when LEVEL=generated, else null (frozen Terrain)
 var _snare_root: Node3D  # stake/loop markers, one per world snare
 
 
+## Staged world build (playtest 2026-10-12): _ready used to build the whole
+## world synchronously behind the Godot splash — on web that is one long
+## main-thread freeze, and the first PLAYING frames then paid audio decode +
+## physics activation as a multi-second spike. Now: a loading overlay with a
+## progress bar, one build stage per frame chunk, audio beds pre-decoded
+## behind the title, and the menu only after WORLD READY.
+var _world_ready := false
+var _loading: CanvasLayer
+
+
+func _make_loading() -> CanvasLayer:
+	var cl := CanvasLayer.new()
+	cl.name = "Loading"
+	cl.layer = 20
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.03, 0.05, 1.0)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cl.add_child(dim)
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_FULL_RECT)
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cl.add_child(box)
+	var lbl := Label.new()
+	lbl.text = "LOADING…"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.add_theme_font_size_override("font_size", 22)
+	box.add_child(lbl)
+	var center := CenterContainer.new()
+	box.add_child(center)
+	var bar := ProgressBar.new()
+	bar.name = "Bar"
+	bar.custom_minimum_size = Vector2(320, 12)
+	bar.max_value = 100.0
+	bar.show_percentage = false
+	center.add_child(bar)
+	return cl
+
+
+func _stage(p: float) -> void:
+	if _loading == null:
+		return
+	var bar := _loading.find_child("Bar", true, false) as ProgressBar
+	if bar != null:
+		bar.value = p * 100.0
+	# two frames: one to apply the additions, one to paint (web rAF)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _finish_loading() -> void:
+	if _loading != null:
+		_loading.queue_free()
+		_loading = null
+
+
 func _ready() -> void:
 	_frozen = OS.get_environment("SHOT_FROZEN") == "1"
+	_loading = _make_loading()
+	add_child(_loading)
 	if OS.get_environment("LEVEL") == "generated":
 		_hm = GenLevel.load_hm()
 	var env := _add_environment()
 	var sun := _add_sun()
+	await _stage(0.10)
 	_camp = GenLevel.camp_center(_hm) if _hm != null else CampSite.find_center()
 	_add_wreck()
 	var terrain := MeshInstance3D.new()
@@ -41,13 +100,17 @@ func _ready() -> void:
 	terrain.mesh = GenLevel.terrain_mesh(_hm) if _hm != null \
 		else TerrainMesh.build(Vector2(Terrain.CRASH.x, Terrain.CRASH.z), 400.0, 128)
 	add_child(terrain)
+	await _stage(0.25)
 	if _hm != null:
 		add_child(GenLevel.collision_body(_hm))
 	else:
 		add_child(_frozen_terrain_collision())
+	await _stage(0.35)
 	add_child(_make_scatter())
+	await _stage(0.55)
 	_add_water()
 	_add_camp()
+	await _stage(0.65)
 	_loop = GameLoop.new()
 	_loop.name = "GameLoop"
 	_loop.setup(SEED)
@@ -78,6 +141,7 @@ func _ready() -> void:
 	_daynight.sky_mat = _sky_mat
 	_daynight.environment = env
 	add_child(_daynight)
+	await _stage(0.80)
 	var hud := SurvivalHud.new()
 	hud.name = "Hud"
 	hud.loop = _loop
@@ -91,6 +155,7 @@ func _ready() -> void:
 	_snare_root = Node3D.new()
 	_snare_root.name = "SnareMarkers"
 	add_child(_snare_root)
+	await _stage(0.95)
 	match OS.get_environment("CHECKPOINT"):
 		"menu":
 			# title screen over the frozen camp view
@@ -144,6 +209,8 @@ func _ready() -> void:
 			# live play: title screen first; PLAYING starts on Enter/click
 			_add_player()
 			_state.force_state(GameState.State.MENU)
+	_world_ready = true
+	_finish_loading()
 
 
 ## Live-play rig (kept as a member so restart can re-seat it at spawn).
@@ -227,15 +294,18 @@ func _frozen_terrain_collision() -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = "TerrainCollision"
 	var cs := CollisionShape3D.new()
+	cs.name = "Shape"
 	var shape := HeightMapShape3D.new()
 	const N := 128
 	const SIZE := 400.0
-	# map_data is row-major over map_width x map_height (Godot 4.7: packed
-	# floats, not an Image). Row index = z, column = x, matching the mesh grid.
+	# map_data is row-major over map_width x map_depth (Godot 4.7: packed
+	# floats, not an Image; the depth property is map_DEPTH, not map_height —
+	# playtest 2026-10-12: the wrong name failed at runtime and the level
+	# shipped with NO terrain floor: players fell through after a few steps).
 	var data := PackedFloat32Array()
 	data.resize(N * N)
 	shape.map_width = N
-	shape.map_height = N
+	shape.map_depth = N
 	var cx := Terrain.CRASH.x
 	var cz := Terrain.CRASH.z
 	for j in N:
@@ -355,7 +425,8 @@ func _sync_snare_markers() -> void:
 
 
 func _process(_d: float) -> void:
-	if _loop != null:
+	# staged _ready: _loop exists before _daynight/_water_mat are added
+	if _loop != null and _daynight != null and _water_mat != null:
 		_daynight.apply(_loop.world.hourOfDay)
 		_sync_snare_markers()
 		if not _frozen:
@@ -372,7 +443,9 @@ func _process(_d: float) -> void:
 	# its own scene tree on frame 2 — frozen menu, dead input, wasm shell
 	# spinning on a dead engine. Headless screenshot tests always set SHOT_OUT,
 	# so only interactive play exposed it.)
-	if _shot_saved:
+	# _world_ready gate: _ready is staged now; shooting before the world is
+	# built would capture the loading bar.
+	if _shot_saved or not _world_ready:
 		return
 	var out := OS.get_environment("SHOT_OUT")
 	if out == "":
